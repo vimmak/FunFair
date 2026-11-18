@@ -1,13 +1,13 @@
 FUNCTION_BLOCK "FB_FunFair_StopGame"
 { S7_Optimized_Access := 'TRUE' }
-VERSION : 0.1
+VERSION : 0.2
    VAR_INPUT
-      Enable : Bool; // Operator enable; FALSE aborts, never auto-resumes
+      Enable : Bool; // Explicit game enable; a new enable allows initial auto-run
       Commissioned : Bool; // Set only after verified limits, units and stop test
       FirstScan : Bool; // TRUE on first OB1 scan after every startup
       MotionPermit : Bool; // Operational permissive, NOT a safety function
       DataValid : Bool; // Fresh/valid PN data; do not hard-wire TRUE
-      GameButton : Bool; // Momentary button: press to start, release to stop
+      ButtonReleased : Bool; // TRUE released, FALSE pressed; rising edge = release
       ResetButton : Bool; // Separate momentary reset; does NOT ack gripper faults
       Ready : Bool;
       FieldbusControl : Bool;
@@ -43,8 +43,8 @@ VERSION : 0.1
       ControlledStop : Bool;
       PositionCommand_um : DInt;
       VelocityCommand_um_s : DInt;
-      State : Int; // 0 disabled,10 wait release,20 armed,30 move gap,
-                   // 40 move ack,50 moving,60 stop ack,70 settling,80 result,900 fault
+      State : Int; // 0 disabled,10 startup release,30 move gap,40 move ack,
+                   // 50 moving,55 drain move ack,60 stop ack,70 settling,80 result,900 fault
       ResultValid : Bool;
       Success : Bool;
       FinalPosition_um : DInt;
@@ -62,9 +62,12 @@ VERSION : 0.1
       MoveTimer : TON_TIME;
       StopTimer : TON_TIME;
       StableTimer : TON_TIME;
-      ButtonFiltered : Bool;
-      ButtonPrevious : Bool;
-      ResetPrevious : Bool;
+      ReleaseFiltered : Bool;
+      ReleaseEdgeDetector : R_TRIG;
+      PressEdgeDetector : R_TRIG;
+      ResetEdgeDetector : R_TRIG;
+      ClickArmed : Bool;
+      RestartRequired : Bool;
       AckBaseline : Bool;
       StopAcked : Bool;
       StableAnchor_um : DInt;
@@ -79,7 +82,10 @@ VERSION : 0.1
    END_VAR
    VAR_TEMP
       PressEdge : Bool;
-      ReleaseEdge : Bool;
+      ClickPulse : Bool;
+      ClickAllowed : Bool;
+      StartRound : Bool;
+      RequestStop : Bool;
       ResetEdge : Bool;
       ConfigValid : Bool;
       Healthy : Bool;
@@ -92,9 +98,9 @@ BEGIN
    // FirstScan is required even if Initialized is already TRUE in memory.
    IF #FirstScan OR NOT #Initialized THEN
       #State := 0;
-      #ButtonFiltered := #GameButton;
-      #ButtonPrevious := #GameButton;
-      #ResetPrevious := #ResetButton;
+      #ReleaseFiltered := #ButtonReleased;
+      #ClickArmed := FALSE;
+      #RestartRequired := FALSE;
       #ResultValid := FALSE;
       #Success := FALSE;
       #FaultCode := W#16#0000;
@@ -104,19 +110,36 @@ BEGIN
       #Initialized := TRUE;
    END_IF;
 
-   #PressTimer(IN := #GameButton AND NOT #FirstScan, PT := #PressFilter);
-   #ReleaseTimer(IN := NOT #GameButton AND NOT #FirstScan, PT := #ReleaseFilter);
+   #PressTimer(IN := NOT #ButtonReleased AND NOT #FirstScan, PT := #PressFilter);
+   #ReleaseTimer(IN := #ButtonReleased AND NOT #FirstScan, PT := #ReleaseFilter);
    #ResetTimer(IN := #ResetButton AND NOT #FirstScan, PT := #ResetFilter);
-   IF #PressTimer.Q THEN
-      #ButtonFiltered := TRUE;
-   ELSIF #ReleaseTimer.Q THEN
-      #ButtonFiltered := FALSE;
+   IF #ReleaseTimer.Q THEN
+      #ReleaseFiltered := TRUE;
+   ELSIF #PressTimer.Q THEN
+      #ReleaseFiltered := FALSE;
    END_IF;
-   #PressEdge := #ButtonFiltered AND NOT #ButtonPrevious;
-   #ReleaseEdge := NOT #ButtonFiltered AND #ButtonPrevious;
-   #ResetEdge := #ResetTimer.Q AND NOT #ResetPrevious;
-   #ButtonPrevious := #ButtonFiltered;
-   #ResetPrevious := #ResetTimer.Q;
+   // Siemens IEC edge instructions, invoked once on every scan.
+   #ReleaseEdgeDetector(CLK := #ReleaseFiltered);
+   #PressEdgeDetector(CLK := NOT #ReleaseFiltered);
+   #ResetEdgeDetector(CLK := #ResetTimer.Q);
+   #PressEdge := #PressEdgeDetector.Q AND NOT #FirstScan;
+   #ResetEdge := #ResetEdgeDetector.Q AND NOT #FirstScan;
+   #ClickAllowed := (#State = 30) OR (#State = 40) OR (#State = 50)
+      OR (#State = 80);
+   #ClickPulse := FALSE;
+   #StartRound := FALSE;
+   #RequestStop := FALSE;
+   IF NOT #ClickAllowed OR #FirstScan THEN
+      #ClickArmed := FALSE;
+   ELSE
+      IF #PressEdge THEN
+         #ClickArmed := TRUE;
+      END_IF;
+      IF #ReleaseEdgeDetector.Q THEN
+         #ClickPulse := #ClickArmed;
+         #ClickArmed := FALSE;
+      END_IF;
+   END_IF;
 
    #ConfigValid := (#VerifiedMin_um >= 0)
       AND (#VerifiedMax_um <= 1000000)
@@ -142,11 +165,11 @@ BEGIN
 
    // Timers are called in every scan, including reset/disable paths.
    #GapTimer(IN := (#State = 30) AND NOT #FirstScan, PT := #CommandGap);
-   #AckTimer(IN := ((#State = 40) OR (#State = 60)) AND NOT #FirstScan,
+   #AckTimer(IN := ((#State = 40) OR (#State = 55) OR (#State = 60)) AND NOT #FirstScan,
              PT := #AckTimeout);
    #MoveTimer(IN := ((#State = 40) OR (#State = 50)) AND NOT #FirstScan,
               PT := #MoveTimeout);
-   #StopTimer(IN := ((#State = 60) OR (#State = 70)) AND NOT #FirstScan,
+   #StopTimer(IN := ((#State = 55) OR (#State = 60) OR (#State = 70)) AND NOT #FirstScan,
               PT := #StopTimeout);
 
    // Anchor-based stability catches accumulated drift, unlike adjacent-scan delta.
@@ -157,13 +180,20 @@ BEGIN
       AND (#PositionDelta <= DINT_TO_LREAL(#StableBandLatched_um));
    #StableTimer(IN := #StableNow AND NOT #FirstScan, PT := #StableTime);
 
-   IF NOT #Enable OR NOT #Commissioned OR NOT #MotionPermit THEN
+   IF NOT #Enable OR NOT #Commissioned THEN
       #State := 0;
       #ResultValid := FALSE;
       #Success := FALSE;
       #FaultCode := W#16#0000;
       #StopAcked := FALSE;
       #PendingFault := W#16#0000;
+      #ClickArmed := FALSE;
+      #RestartRequired := FALSE;
+   ELSIF NOT #MotionPermit THEN
+      #State := 900;
+      #FaultCode := W#16#0009;
+      #ResultValid := FALSE;
+      #Success := FALSE;
    ELSIF NOT #Healthy THEN
       #State := 900;
       #FaultCode := W#16#0001;
@@ -176,53 +206,41 @@ BEGIN
       #ResultValid := FALSE;
       #Success := FALSE;
    ELSE
-      // Operator reset while moving aborts via controlled stop, never declares a win.
+      // Fault recovery requires an explicit game reset after driver recovery.
+      // Restoring communications alone must not re-start automatic motion.
       IF #ResetEdge AND #ActiveRound THEN
          #PendingFault := W#16#0007;
          #NeedRearm := TRUE;
-         IF (#State <> 60) AND (#State <> 70) THEN
+         IF (#State <> 55) AND (#State <> 60) AND (#State <> 70) THEN
+            #RequestStop := TRUE;
+         END_IF;
+      ELSIF #ClickPulse AND ((#State = 30) OR (#State = 40) OR (#State = 50)) THEN
+         #RequestStop := TRUE;
+      END_IF;
+      IF #RequestStop THEN
+         #ClickArmed := FALSE;
+         #StopAcked := FALSE;
+         IF #State = 40 THEN
+            // Preserve the MOVE baseline: do not call a late MOVE ack a STOP ack.
+            // Stop is issued only after this outstanding acknowledgement is drained.
+            #State := 55;
+         ELSE
             #AckBaseline := #ReceivedToggle;
-            #StopAcked := FALSE;
             #State := 60;
          END_IF;
-      ELSIF #ReleaseEdge AND ((#State = 30) OR (#State = 40) OR (#State = 50)) THEN
-         #AckBaseline := #ReceivedToggle;
-         #StopAcked := FALSE;
-         #State := 60;
       END_IF;
 
       CASE #State OF
          0:
             #State := 10;
-         10: // Must observe actual and filtered button released before arming.
-            IF NOT #GameButton AND NOT #ButtonFiltered THEN
-               #State := 20;
-            END_IF;
-         20:
-            IF #PressEdge THEN
-               IF #ConfigValid THEN
-                  #LowLatched_um := #LowPosition_um;
-                  #HighLatched_um := #HighPosition_um;
-                  #VelocityLatched_um_s := #Velocity_um_s;
-                  #RoundTarget_um := #TargetPosition_um;
-                  #RoundTolerance_um := #Tolerance_um;
-                  #StableBandLatched_um := #StableBand_um;
-                  #EndpointBandLatched_um := #EndpointBand_um;
-                  #PositionCommand_um := #HighPosition_um;
-                  #ResultValid := FALSE;
-                  #Success := FALSE;
-                  #FaultCode := W#16#0000;
-                  #PendingFault := W#16#0000;
-                  #NeedRearm := FALSE;
-                  #State := 30;
-               ELSE
-                  #FaultCode := W#16#0002;
-                  #State := 900;
-               END_IF;
+         10:
+            // Auto-run only on initial authorized game entry, after stable release.
+            IF #ButtonReleased AND #ReleaseFiltered AND #ReleaseTimer.Q
+               AND NOT #RestartRequired THEN
+               #StartRound := TRUE;
             END_IF;
          30: // All movement command bits low before each new absolute move.
-            // Do not reverse while a raw release is still being filtered.
-            IF #GameButton AND #GapTimer.Q THEN
+            IF #GapTimer.Q THEN
                #AckBaseline := #ReceivedToggle;
                #State := 40;
             END_IF;
@@ -247,6 +265,14 @@ BEGIN
                   #PositionCommand_um := #HighLatched_um;
                END_IF;
                #State := 30;
+            END_IF;
+         55: // No new command until the in-flight MOVE ack has been accounted for.
+            IF #ReceivedToggle <> #AckBaseline THEN
+               #AckBaseline := #ReceivedToggle;
+               #State := 60;
+            ELSIF #AckTimer.Q THEN
+               #FaultCode := W#16#0003;
+               #State := 900;
             END_IF;
          60:
             IF #ReceivedToggle <> #AckBaseline THEN
@@ -278,24 +304,59 @@ BEGIN
                #StableAnchor_um := #ActualPosition_um;
             END_IF;
          80:
-            IF #ResetEdge AND NOT #GameButton AND NOT #ButtonFiltered THEN
+            IF #ResetEdge THEN
                #ResultValid := FALSE;
                #Success := FALSE;
                #FaultCode := W#16#0000;
-               #State := 10;
+               #RestartRequired := TRUE;
+               #ClickArmed := FALSE;
+            ELSIF #ClickPulse THEN
+               #StartRound := TRUE;
             END_IF;
          900:
             #ResultValid := FALSE;
             #Success := FALSE;
-            IF #ResetEdge AND NOT #GameButton AND NOT #ButtonFiltered
+            IF #ResetEdge AND #ButtonReleased AND #ReleaseFiltered
                AND #Healthy AND #ConfigValid THEN
                #FaultCode := W#16#0000;
-               #State := 10;
+               #RestartRequired := TRUE;
+               #ClickArmed := FALSE;
+               #State := 80;
             END_IF;
          ELSE
             #State := 900;
             #FaultCode := W#16#0008;
       END_CASE;
+
+      IF #StartRound THEN
+         IF #ConfigValid THEN
+            #LowLatched_um := #LowPosition_um;
+            #HighLatched_um := #HighPosition_um;
+            #VelocityLatched_um_s := #Velocity_um_s;
+            #RoundTarget_um := #TargetPosition_um;
+            #RoundTolerance_um := #Tolerance_um;
+            #StableBandLatched_um := #StableBand_um;
+            #EndpointBandLatched_um := #EndpointBand_um;
+            // Start towards HIGH, except when already within its endpoint band.
+            IF ABS(DINT_TO_LREAL(#ActualPosition_um) - DINT_TO_LREAL(#HighPosition_um))
+               <= DINT_TO_LREAL(#EndpointBand_um) THEN
+               #PositionCommand_um := #LowPosition_um;
+            ELSE
+               #PositionCommand_um := #HighPosition_um;
+            END_IF;
+            #ResultValid := FALSE;
+            #Success := FALSE;
+            #FaultCode := W#16#0000;
+            #PendingFault := W#16#0000;
+            #NeedRearm := FALSE;
+            #RestartRequired := FALSE;
+            #ClickArmed := FALSE;
+            #State := 30;
+         ELSE
+            #FaultCode := W#16#0002;
+            #State := 900;
+         END_IF;
+      END_IF;
    END_IF;
 
    // Decode AFTER all transitions: stop wins over a move in the same scan.
