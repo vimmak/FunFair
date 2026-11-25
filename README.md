@@ -2,7 +2,15 @@
 FunFair for SCHUNK Intec China Christmas Event
 
 
-## 精准停位小游戏（程序草稿 v0.2）
+## 当前版本 · 博途 V20，双 PNP 按钮
+
+[集成入口 FB_FunFairEGU_V20](plc/v20/FB_FunFairEGU_V20.scl) 每扫描调用 [游戏块 FB_StopGameV20](plc/v20/FB_StopGameV20.scl) 和雄克原生周期块。依次导入厂家提供的原生 SCL、游戏块、集成入口。OB1 周期调用集成入口一次，使用非保持实例和有效首次扫描信号，避免其他块同时写夹爪。
+
+将经过 DI 滤波的开始、暂停按钮分别接到 StartDI、PauseDI，按下为 TRUE。上电先等两键释放；按开始往复或开始下一回合，按暂停停稳判分。按住和松开均不重复触发，同时按下时暂停优先。硬件地址由实际组态提供。ResetButton 是维护复位命令，无需第三个游戏按钮。设备启动和故障确认由维护逻辑提供 ServiceFastRelease 和 ServiceAck；只有游戏失能时允许使用。DataValid 必须来自实际设备诊断。
+
+新版沿用无工件定位模式，夹持及 GPE 指令关闭，现场需按负载确认。定位确认未到时暂停仍先等该确认，再发受控停止；确认超时进入故障。暂停按钮仅用于游戏。扫描逻辑已测试，V20 编译、设备初始化以及实机停止时序尚待验证。
+
+## 历史版本 · 精准停位小游戏（程序草稿 v0.2）
 
 目标组合：TIA Portal V18、S7-1200 CPU 1211C DC/DC/DC、SCHUNK EGU 60-PN-M-B。
 

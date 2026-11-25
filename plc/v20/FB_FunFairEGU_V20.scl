@@ -1,0 +1,133 @@
+FUNCTION_BLOCK "FB_FunFairEGU_V20"
+VERSION : 0.1
+   VAR_INPUT
+      Enable : Bool;
+      Commissioned : Bool;
+      FirstScan : Bool;
+      MotionPermit : Bool;
+      DataValid : Bool;
+      StartDI : Bool;
+      PauseDI : Bool;
+      ResetButton : Bool;
+      LowPosition_um : DInt;
+      HighPosition_um : DInt;
+      TargetPosition_um : DInt;
+      Tolerance_um : DInt;
+      Velocity_um_s : DInt;
+      VerifiedMin_um : DInt;
+      VerifiedMax_um : DInt;
+      VerifiedMinVelocity_um_s : DInt;
+      VerifiedMaxVelocity_um_s : DInt;
+      ResetFilter : Time := T#20ms;
+      CommandGap : Time := T#50ms;
+      AckTimeout : Time := T#1s;
+      MoveTimeout : Time := T#15s;
+      StopTimeout : Time := T#3s;
+      StableTime : Time := T#200ms;
+      StableBand_um : DInt := 20;
+      EndpointBand_um : DInt := 100;
+      InputHW : HW_IO;
+      OutputHW : HW_IO;
+      ServiceFastRelease : Bool;
+      ServiceAck : Bool;
+   END_VAR
+   VAR_OUTPUT
+      FastStopRelease : Bool;
+      MoveAbsolute : Bool;
+      ControlledStop : Bool;
+      PositionCommand_um : DInt;
+      VelocityCommand_um_s : DInt;
+      State : Int;
+      ResultValid : Bool;
+      Success : Bool;
+      FinalPosition_um : DInt;
+      SignedError_um : DInt;
+      RoundTarget_um : DInt;
+      RoundTolerance_um : DInt;
+      FaultCode : Word;
+   END_VAR
+   VAR
+      Game : "FB_StopGameV20";
+      EGU : "FB_SFP_EGU_EGK_Profinet_Cyclic_DATA";
+   END_VAR
+   VAR_TEMP
+      FastRelease : Bool;
+      Ack : Bool;
+   END_VAR
+BEGIN
+   #Game(Enable := #Enable,
+         Commissioned := #Commissioned,
+         FirstScan := #FirstScan,
+         MotionPermit := #MotionPermit,
+         DataValid := #DataValid,
+         StartDI := #StartDI,
+         PauseDI := #PauseDI,
+         ResetButton := #ResetButton,
+         Ready := #EGU.b_00_READY_FOR_OPERATION,
+         FieldbusControl := #EGU.b_01_CONTOL_AUTHORITY_FIELDBUS,
+         DeviceError := #EGU.b_07_ERROR,
+         NotFeasible := #EGU.b_03_NOT_FEASIBLE,
+         CommandDone := #EGU.b_04_COMMAND_SUCCESSFULLY_PROCESSED,
+         PositionReached := #EGU.b_13_POSITION_REACHED,
+         ReceivedToggle := #EGU.b_05_COMMAND_RECEIVED_TOGGLE,
+         ActualPosition_um := #EGU.di_ACTUAL_POSITION,
+         LowPosition_um := #LowPosition_um,
+         HighPosition_um := #HighPosition_um,
+         TargetPosition_um := #TargetPosition_um,
+         Tolerance_um := #Tolerance_um,
+         Velocity_um_s := #Velocity_um_s,
+         VerifiedMin_um := #VerifiedMin_um,
+         VerifiedMax_um := #VerifiedMax_um,
+         VerifiedMinVelocity_um_s := #VerifiedMinVelocity_um_s,
+         VerifiedMaxVelocity_um_s := #VerifiedMaxVelocity_um_s,
+         ResetFilter := #ResetFilter,
+         CommandGap := #CommandGap,
+         AckTimeout := #AckTimeout,
+         MoveTimeout := #MoveTimeout,
+         StopTimeout := #StopTimeout,
+         StableTime := #StableTime,
+         StableBand_um := #StableBand_um,
+         EndpointBand_um := #EndpointBand_um);
+   #FastRelease := #Game.FastStopRelease;
+   #Ack := FALSE;
+   IF NOT #Enable AND #Commissioned AND #MotionPermit AND #DataValid AND NOT #FirstScan THEN
+      #FastRelease := #ServiceFastRelease;
+      #Ack := #ServiceAck AND #FastRelease;
+   END_IF;
+   #EGU(b_RELEASE_FUNCTION_BLOCK := TRUE,
+        b_00_FAST_STOP := #FastRelease,
+        b_01_STOP := #Game.ControlledStop,
+        b_02_ACKNOLEDGE := #Ack,
+        b_03_PREPARE_FOR_SHUTDOWN := FALSE,
+        b_04_SOFTRESET := FALSE,
+        b_05_RELEASE_FOR_MANUAL_MOVEMENT := FALSE,
+        b_06_REPEAT_COMMAND_TOGGLE := FALSE,
+        b_07_GRIP_DIRECTION := FALSE,
+        b_08_JOG_MODE_NEGATIVE := FALSE,
+        b_09_JOG_MODE_POSITIVE := FALSE,
+        b_11_RELEASE_WORKPIECE := FALSE,
+        b_12_GRIP_WORKPIECE := FALSE,
+        b_13_MOVE_TO_ABSOLUTE_POSITION := #Game.MoveAbsolute,
+        b_14_MOVE_TO_RELATIVE_POSITION := FALSE,
+        b_16_GRIP_WORKPIECE_AT_EXPECTED_POSITION := FALSE,
+        b_30_BRAKE_TEST := FALSE,
+        b_31_ACTIVATE_GRIP_FORCE_AND_POSITION_MAINTENANCE := FALSE,
+        di_POSITION := #Game.PositionCommand_um,
+        di_VELOCITY := #Game.VelocityCommand_um_s,
+        di_GRIPPING_FORCE := 0,
+        HW_ADDRESS_INPUT := #InputHW,
+        HW_ADDRESS_OUTPUT := #OutputHW);
+   #FastStopRelease := #Game.FastStopRelease;
+   #MoveAbsolute := #Game.MoveAbsolute;
+   #ControlledStop := #Game.ControlledStop;
+   #PositionCommand_um := #Game.PositionCommand_um;
+   #VelocityCommand_um_s := #Game.VelocityCommand_um_s;
+   #State := #Game.State;
+   #ResultValid := #Game.ResultValid;
+   #Success := #Game.Success;
+   #FinalPosition_um := #Game.FinalPosition_um;
+   #SignedError_um := #Game.SignedError_um;
+   #RoundTarget_um := #Game.RoundTarget_um;
+   #RoundTolerance_um := #Game.RoundTolerance_um;
+   #FaultCode := #Game.FaultCode;
+END_FUNCTION_BLOCK

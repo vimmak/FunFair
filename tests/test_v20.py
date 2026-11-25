@@ -1,0 +1,43 @@
+import unittest
+from unittest.mock import patch
+import test_scan_logic as sim
+
+
+class TwoButtons(unittest.TestCase):
+    def setUp(self):
+        with patch.object(sim, 'SOURCE', sim.SOURCE.parent/'v20'/'FB_StopGameV20.scl'):
+            self.m = sim.ScanModel()
+        self.m.scan(FirstScan=True, StartDI=True)
+        self.m.scan(20, FirstScan=False)
+        self.assertEqual(self.m.v['State'], 10)
+        self.m.scan(3, StartDI=False)
+        self.assertEqual(self.m.v['State'], 20)
+
+    def test_press_pause_resume(self):
+        m = self.m
+        m.scan(20, StartDI=True)
+        m.scan(ReceivedToggle=True)
+        m.scan(StartDI=False)
+        self.assertEqual(m.v['State'], 50)
+        m.scan(PauseDI=True)
+        self.assertTrue(m.v['ControlledStop'])
+        m.scan(PauseDI=False)
+        m.finish_stop()
+        self.assertTrue(m.v['ResultValid'])
+        m.scan(StartDI=True)
+        self.assertEqual(m.v['State'], 30)
+
+    def test_simultaneous_and_held_start(self):
+        m = self.m
+        m.scan(StartDI=True, PauseDI=True)
+        m.scan(20, PauseDI=False)
+        self.assertEqual(m.v['State'], 20)
+        m.scan(StartDI=False)
+        m.scan(20, StartDI=True)
+        m.scan(PauseDI=True)
+        self.assertEqual(m.v['State'], 55)
+        m.scan(ReceivedToggle=True)
+        self.assertEqual(m.v['State'], 60)
+        m.finish_stop()
+        m.scan(20, PauseDI=False)
+        self.assertEqual(m.v['State'], 80)
