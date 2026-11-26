@@ -1,0 +1,82 @@
+FUNCTION_BLOCK "FB_FunFairTarget"
+VERSION : 1.0
+   VAR_INPUT
+      FirstScan : Bool;
+      PauseDI : Bool;
+      GameState : Int; // Game instance output from the previous OB1 scan
+      ClosePosition_um : DInt;
+      OpenPosition_um : DInt;
+      FixedTarget_um : DInt;
+      ModeRequest : Word;
+   END_VAR
+   VAR_OUTPUT
+      Target_um : DInt;
+      ActiveMode : Word;
+   END_VAR
+   VAR
+      Leg : TON_TIME;
+      TowardsOpen : Bool;
+      ResetLeg : Bool;
+      Running : Bool;
+      Duration_ms : DInt;
+      LegStart_um : DInt;
+      LegEnd_um : DInt;
+      RandomState : DInt;
+   END_VAR
+   VAR_TEMP
+      CanRun : Bool;
+      Phase : LReal;
+      Progress : LReal;
+   END_VAR
+BEGIN
+   IF #FirstScan THEN
+      #ActiveMode := W#16#0001;
+      #Target_um := #FixedTarget_um;
+      #TowardsOpen := TRUE;
+      #Running := FALSE;
+      #Duration_ms := 3600;
+      #RandomState := 1;
+   END_IF;
+   // Vary the initial sequence with the scan at which the player selects V2.
+   #RandomState := (25173 * #RandomState + 13849) MOD 65536;
+   #CanRun := NOT #FirstScan AND NOT #PauseDI
+      AND ((#GameState = 30) OR (#GameState = 40) OR (#GameState = 50));
+   IF #CanRun AND ((#ModeRequest = W#16#0001) OR (#ModeRequest = W#16#0002)) THEN
+      IF #ActiveMode <> #ModeRequest THEN
+         #Running := FALSE;
+         #TowardsOpen := TRUE;
+         #Target_um := #ClosePosition_um;
+      END_IF;
+      #ActiveMode := #ModeRequest;
+   END_IF;
+   IF NOT #CanRun OR (#ActiveMode <> W#16#0002) THEN
+      #Running := FALSE;
+   ELSIF NOT #Running THEN
+      #ResetLeg := TRUE;
+      #Duration_ms := 2300 + (#RandomState MOD 2901);
+      #Running := TRUE;
+   END_IF;
+   IF #Running AND #ResetLeg THEN
+      #LegStart_um := #Target_um;
+      IF #TowardsOpen THEN
+         #LegEnd_um := #OpenPosition_um;
+      ELSE
+         #LegEnd_um := #ClosePosition_um;
+      END_IF;
+   END_IF;
+   #Leg(IN := #Running AND NOT #ResetLeg, PT := DINT_TO_TIME(#Duration_ms));
+   #ResetLeg := FALSE;
+   IF #ActiveMode = W#16#0001 THEN
+      #Target_um := #FixedTarget_um;
+   ELSIF #Running THEN
+      #Phase := DINT_TO_LREAL(TIME_TO_DINT(#Leg.ET)) / DINT_TO_LREAL(#Duration_ms);
+      #Progress := #Phase * #Phase * (3.0 - 2.0 * #Phase);
+      #Target_um := LREAL_TO_DINT(DINT_TO_LREAL(#LegStart_um)
+         + #Progress * (DINT_TO_LREAL(#LegEnd_um) - DINT_TO_LREAL(#LegStart_um)));
+      IF #Leg.Q THEN
+         #TowardsOpen := NOT #TowardsOpen;
+         #Duration_ms := 2300 + (#RandomState MOD 2901);
+         #ResetLeg := TRUE;
+      END_IF;
+   END_IF;
+END_FUNCTION_BLOCK

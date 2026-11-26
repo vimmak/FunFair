@@ -11,7 +11,7 @@ SOURCE = Path(__file__).resolve().parents[1] / 'plc/FB_FunFair_StopGame.scl'
 
 def tokens(text):
     text = re.sub(r'//[^\n]*', '', text)
-    pattern = r'W#16#[0-9A-Fa-f]+|T#\d+(?:ms|s)|#[A-Za-z_]\w*(?:\.\w+)?|:=|<>|<=|>=|\d+|[A-Za-z_]\w*|[();:,=<>+\-]'
+    pattern = r'W#16#[0-9A-Fa-f]+|T#\d+(?:ms|s)|#[A-Za-z_]\w*(?:\.\w+)?|:=|<>|<=|>=|\d+(?:\.\d+)?|[A-Za-z_]\w*|[();:,=<>+*/\-]'
     result = re.findall(pattern, text)
     if re.sub(pattern, '', text).strip():
         raise ValueError('Unsupported syntax in simulator')
@@ -100,6 +100,7 @@ class Timer:
         else:
             self.active = True
         self.Q = bool(IN and self.elapsed >= PT)
+        self.ET = min(self.elapsed, PT)
 
 
 class Edge:
@@ -140,8 +141,9 @@ class ScanModel:
             elif t.startswith('W#16#'): out.append(str(int(t[5:],16)))
             else: out.append({'AND':'and','OR':'or','NOT':'not','TRUE':'True',
                 'FALSE':'False','=':'==','<>':'!=','ABS':'abs',
-                'DINT_TO_LREAL':'float'}.get(t,t))
-        return eval(' '.join(out), {'__builtins__':{},'abs':abs,'float':float}, {'v':self.v})
+                'DINT_TO_LREAL':'float','LREAL_TO_DINT':'round',
+                'DINT_TO_TIME':'int','TIME_TO_DINT':'int','MOD':'%'}.get(t,t))
+        return eval(' '.join(out), {'__builtins__':{},'abs':abs,'float':float,'round':round,'int':int}, {'v':self.v})
 
     def run(self, code, dt):
         for stmt in code:
