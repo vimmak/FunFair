@@ -6,6 +6,10 @@ import { decode, movingReplay, replay } from './protocol.js'
 
 const demo = process.argv.includes('--demo')
 const host = process.env.PLC_HOST
+const pollMs = Number(process.env.PLC_POLL_MS ?? 20)
+if (!demo && (!Number.isInteger(pollMs) || pollMs < 10 || pollMs > 1000)) {
+  throw new Error('PLC_POLL_MS 必须是 10–1000 的整数（毫秒）')
+}
 if (!demo && !host) throw new Error('请设置 PLC_HOST，或使用 npm run demo')
 const app = express()
 const clients = new Set()
@@ -70,7 +74,7 @@ async function poll() {
           pendingMode = undefined
           await plc.writeRegister(25, mode)
         }
-        await delay(50)
+        await delay(pollMs)
       }
     } catch (error) {
       count = 24

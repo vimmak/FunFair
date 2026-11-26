@@ -11,8 +11,8 @@
   <header>
     <div class="brand"><strong>FunFair</strong><span>SCHUNK · 精准停位挑战</span></div>
     <nav aria-label="游戏版本">
-      <button v-for="mode in [1,2]" :key="mode" :aria-pressed="(f?.mode ?? 1) === mode"
-        :disabled="!switchable || (f?.mode ?? 1) === mode" @click="selectMode(mode)">
+      <button v-for="mode in [1,2]" :key="mode" :aria-pressed="f?.mode === mode"
+        :disabled="!switchable || f?.mode === mode" @click="selectMode(mode)">
         {{ mode === 1 ? 'V1 固定目标' : 'V2 移动目标' }}
       </button>
     </nav>
@@ -54,6 +54,8 @@
 
   <footer>
     <div :key="f?.seq" class="score">{{ f?.seq ? '最近成绩 · '+(f.lastSuccess?'命中':'未命中')+'　'+signed(f.lastError)+' mm' : '等待首轮成绩' }}</div>
+    <div v-if="f?.canSwitch && !demo" class="mode-readback">请求 V{{ f.modeRequest }} · PLC 当前 {{ f.mode ? 'V' + f.mode : '无效值 ' + hex(f.activeModeWord) }}</div>
+    <div v-else-if="f && !demo">PLC 显示协议 V1</div>
     <div>状态 {{ f?.state ?? '—' }}　程序 {{ hex(f?.fault) }}　夹爪 {{ hex(f?.gripperFault) }}</div>
   </footer>
 </main>
