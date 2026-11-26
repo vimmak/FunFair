@@ -67,3 +67,32 @@ class TwoButtons(unittest.TestCase):
         self.assertTrue(m.v['ControlledStop'])
         m.scan(MotionPermit=True)
         self.assertEqual(m.v['State'], 900)
+
+    def test_startup_waits_for_feedback_and_fresh_start(self):
+        m = self.m
+        m.scan(FirstScan=True, Ready=False, FieldbusControl=False)
+        m.scan(10, FirstScan=False, StartDI=True)
+        self.assertEqual(m.v['State'], 0)
+        m.scan(10, Ready=True, FieldbusControl=True)
+        self.assertEqual(m.v['State'], 10)
+        m.scan(StartDI=False)
+        m.scan(20, StartDI=True)
+        self.assertTrue(m.v['MoveAbsolute'])
+
+    def test_reset_reveals_invalid_speed_then_runs_both_directions(self):
+        m = self.m
+        m.scan(Ready=False)
+        m.scan(8, Ready=True, ResetButton=True, Velocity_um_s=2000,
+               VerifiedMinVelocity_um_s=5000)
+        self.assertEqual(m.v['FaultCode'], 2)
+        m.scan(ResetButton=False, Velocity_um_s=5000)
+        m.scan(8, ResetButton=True)
+        m.scan(ResetButton=False)
+        m.scan(20, StartDI=True)
+        for toggle, endpoint, following in [(True, 50000, 10000), (False, 10000, 50000)]:
+            self.assertEqual(m.v['PositionCommand_um'], endpoint)
+            m.scan(ReceivedToggle=toggle)
+            m.scan(ActualPosition_um=endpoint, PositionReached=True, CommandDone=True)
+            m.scan(20)
+            self.assertEqual(m.v['PositionCommand_um'], following)
+            self.assertTrue(m.v['MoveAbsolute'])

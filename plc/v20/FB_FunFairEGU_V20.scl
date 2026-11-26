@@ -16,22 +16,10 @@ VERSION : 0.1
       VerifiedMax_um : DInt;
       VerifiedMinVelocity_um_s : DInt;
       VerifiedMaxVelocity_um_s : DInt;
-      ResetFilter : Time := T#20ms;
-      CommandGap : Time := T#50ms;
-      AckTimeout : Time := T#1s;
-      MoveTimeout : Time := T#15s;
-      StopTimeout : Time := T#3s;
-      StableTime : Time := T#200ms;
-      StableBand_um : DInt := 20;
-      EndpointBand_um : DInt := 100;
       InputHW : HW_IO;
       OutputHW : HW_IO;
    END_VAR
    VAR_OUTPUT
-      MoveAbsolute : Bool;
-      ControlledStop : Bool;
-      PositionCommand_um : DInt;
-      VelocityCommand_um_s : DInt;
       State : Int;
       ResultValid : Bool;
       Success : Bool;
@@ -68,15 +56,7 @@ BEGIN
          VerifiedMin_um := #VerifiedMin_um,
          VerifiedMax_um := #VerifiedMax_um,
          VerifiedMinVelocity_um_s := #VerifiedMinVelocity_um_s,
-         VerifiedMaxVelocity_um_s := #VerifiedMaxVelocity_um_s,
-         ResetFilter := #ResetFilter,
-         CommandGap := #CommandGap,
-         AckTimeout := #AckTimeout,
-         MoveTimeout := #MoveTimeout,
-         StopTimeout := #StopTimeout,
-         StableTime := #StableTime,
-         StableBand_um := #StableBand_um,
-         EndpointBand_um := #EndpointBand_um);
+         VerifiedMaxVelocity_um_s := #VerifiedMaxVelocity_um_s);
    #EGU(b_RELEASE_FUNCTION_BLOCK := TRUE,
         b_00_FAST_STOP := TRUE,
         b_01_STOP := #Game.ControlledStop,
@@ -100,10 +80,6 @@ BEGIN
         di_GRIPPING_FORCE := 0,
         HW_ADDRESS_INPUT := #InputHW,
         HW_ADDRESS_OUTPUT := #OutputHW);
-   #MoveAbsolute := #Game.MoveAbsolute;
-   #ControlledStop := #Game.ControlledStop;
-   #PositionCommand_um := #Game.PositionCommand_um;
-   #VelocityCommand_um_s := #Game.VelocityCommand_um_s;
    #State := #Game.State;
    #ResultValid := #Game.ResultValid;
    #Success := #Game.Success;

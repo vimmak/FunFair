@@ -40,7 +40,7 @@ VERSION : 0.3
       ControlledStop : Bool;
       PositionCommand_um : DInt;
       VelocityCommand_um_s : DInt;
-      State : Int; // 0 disabled,10 release both,20 wait start,30 move gap,40 move ack,
+      State : Int; // 0 waiting for initial feedback,10 release both,20 wait start,30 move gap,40 move ack,
                    // 50 moving,55 drain move ack,60 stop ack,70 settling,80 result,900 fault
       ResultValid : Bool;
       Success : Bool;
@@ -138,7 +138,7 @@ BEGIN
 
    // Timers are called in every scan, including reset/disable paths.
    #GapTimer(IN := (#State = 30) AND NOT #FirstScan, PT := #CommandGap);
-   #AckTimer(IN := ((#State = 40) OR (#State = 55) OR (#State = 60)) AND NOT #FirstScan,
+   #AckTimer(IN := ((#State = 40) OR (#State = 55)) AND NOT #FirstScan,
              PT := #AckTimeout);
    #MoveTimer(IN := ((#State = 40) OR (#State = 50)) AND NOT #FirstScan,
               PT := #MoveTimeout);
@@ -153,7 +153,13 @@ BEGIN
       AND (#PositionDelta <= DINT_TO_LREAL(#StableBandLatched_um));
    #StableTimer(IN := #StableNow AND NOT #FirstScan, PT := #StableTime);
 
-   IF NOT #MotionPermit THEN
+   // The wrapper reads EGU feedback from the previous scan. Wait for
+   // first valid feedback before arming. Explicit device faults still latch.
+   IF (#State = 0) AND (NOT #DataValid OR
+      (NOT #DeviceError AND NOT #NotFeasible AND
+       (NOT #Ready OR NOT #FieldbusControl OR NOT #MotionPermit))) THEN
+      #State := 0;
+   ELSIF NOT #MotionPermit THEN
       #State := 900;
       #FaultCode := W#16#0009;
       #ResultValid := FALSE;
@@ -242,7 +248,7 @@ BEGIN
                #StopAcked := TRUE;
                #StableAnchor_um := #ActualPosition_um;
                #State := 70;
-            ELSIF #AckTimer.Q THEN
+            ELSIF #StopTimer.Q THEN
                #FaultCode := W#16#0003;
                #State := 900;
             END_IF;
@@ -278,9 +284,13 @@ BEGIN
             #ResultValid := FALSE;
             #Success := FALSE;
             IF #ResetEdge AND NOT #StartDI AND NOT #PauseDI
-               AND #Healthy AND #ConfigValid THEN
-               #FaultCode := W#16#0000;
-               #State := 80;
+               AND #Healthy THEN
+               IF #ConfigValid THEN
+                  #FaultCode := W#16#0000;
+                  #State := 80;
+               ELSE
+                  #FaultCode := W#16#0002;
+               END_IF;
             END_IF;
          ELSE
             #State := 900;
