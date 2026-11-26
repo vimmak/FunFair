@@ -23,11 +23,12 @@ test('回放先未命中、后命中，并在解锁后保留成绩', () => {
 test('V2 扩展帧反馈实际模式，V1 帧仍可解码', () => {
   const words = [0x4646, 2, ...Array(22).fill(0), 2, 1]
   assert.equal(decode(words).mode, 2)
-  assert.equal(decode(words).modeRequest, 1)
-  assert.equal(decode(words).canSwitch, true)
+  words[25] = 2
+  words[24] = 1
+  assert.equal(decode(words).mode, 1)
   words[24] = 0
   assert.equal(decode(words).mode, null)
   assert.equal(decode(words).activeModeWord, 0)
   words[1] = 1
-  assert.equal(decode(words.slice(0, 24)).canSwitch, false)
+  assert.equal(decode(words.slice(0, 24)).mode, 1)
 })

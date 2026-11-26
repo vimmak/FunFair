@@ -1,10 +1,13 @@
 import { createApp } from '/vue.js'
 
 createApp({
-  data: () => ({ f: null, online: false, demo: false, reason: '', received: 0, requested: null, notice: '', full: false }),
+  data: () => ({ f: null, online: false, demo: false, reason: '', received: 0, full: false }),
   computed: {
-    switchable() {
-      return this.online && this.f?.canSwitch && [30, 40, 50].includes(this.f.state) && !this.requested
+    modeLabel() {
+      if (!this.f) return '等待模式数据'
+      if (this.f.mode === 1) return '固定目标'
+      if (this.f.mode === 2) return '移动目标'
+      return '模式数据无效'
     },
     overlap() {
       return this.online && [30, 40, 50].includes(this.f.state) &&
@@ -40,25 +43,6 @@ createApp({
     mm(v) { return Number.isFinite(v) ? (v/1000).toFixed(3) : '—' },
     signed(v) { return (v > 0 ? '+' : '') + this.mm(v) },
     hex(v) { return Number.isFinite(v) ? '0x'+v.toString(16).padStart(4,'0').toUpperCase() : '—' },
-    async selectMode(mode) {
-      this.requested = mode
-      this.notice = '等待 PLC 确认版本'
-      try {
-        const response = await fetch('/mode', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode })
-        })
-        if (!response.ok) throw new Error(response.status)
-        setTimeout(() => {
-          if (this.requested === mode) {
-            this.requested = null
-            this.notice = '版本切换尚未确认'
-          }
-        }, 4000)
-      } catch {
-        this.requested = null
-        this.notice = '夹爪往复时可切换版本'
-      }
-    },
     fullscreen() {
       if (document.fullscreenElement) document.exitFullscreen()
       else document.documentElement.requestFullscreen()
@@ -73,16 +57,7 @@ createApp({
       this.online = frame.online
       this.demo = frame.demo
       this.reason = frame.reason
-      if (frame.online) {
-        this.f = frame
-        if (frame.mode === this.requested) {
-          this.requested = null
-          this.notice = ''
-        }
-      } else {
-        this.requested = null
-        this.notice = ''
-      }
+      if (frame.online) this.f = frame
     }
     events.onerror = () => { this.online = false; this.reason = '等待本地服务重连' }
     setInterval(() => {

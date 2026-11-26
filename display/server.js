@@ -13,18 +13,6 @@ if (!demo && (!Number.isInteger(pollMs) || pollMs < 10 || pollMs > 1000)) {
 if (!demo && !host) throw new Error('请设置 PLC_HOST，或使用 npm run demo')
 const app = express()
 const clients = new Set()
-let pendingMode
-let demoMode = 1
-app.post('/mode', express.json({ limit: '1kb' }), (req, res) => {
-  const { mode } = req.body || {}
-  if (mode !== 1 && mode !== 2) return res.sendStatus(400)
-  if (!snapshot.online || !snapshot.canSwitch || ![30, 40, 50].includes(snapshot.state)) {
-    return res.sendStatus(409)
-  }
-  if (demo) demoMode = mode
-  else pendingMode = mode
-  return res.sendStatus(202)
-})
 let snapshot = { online: false, reason: '等待数据', demo }
 function publish(frame) {
   snapshot = { ...frame, demo }
@@ -69,16 +57,10 @@ async function poll() {
         }
         if (Date.now() - changed > 1500) throw new Error('PLC 显示数据停止刷新')
         publish({ online: true, ...frame })
-        if (pendingMode && frame.canSwitch && [30, 40, 50].includes(frame.state)) {
-          const mode = pendingMode
-          pendingMode = undefined
-          await plc.writeRegister(25, mode)
-        }
         await delay(pollMs)
       }
     } catch (error) {
       count = 24
-      pendingMode = undefined
       publish({ online: false, reason: error.message })
     } finally {
       plc.close(() => {})
@@ -89,13 +71,11 @@ async function poll() {
 if (demo) {
   const start = Date.now()
   let latest
-  let lastMode
+  const demoMode = process.argv.includes('--moving') ? 2 : 1
   setInterval(() => {
     const frame = demoMode === 1 ? replay(Date.now() - start) : movingReplay(Date.now() - start)
-    if (demoMode !== lastMode) latest = undefined
     if (frame.valid) latest = { seq: frame.seq, lastSuccess: frame.success, lastError: frame.error }
-    lastMode = demoMode
-    publish({ ...frame, seq: 0, ...latest, online: true, mode: demoMode, canSwitch: true })
+    publish({ ...frame, seq: 0, ...latest, online: true, mode: demoMode })
   }, 50)
 } else {
   poll().catch(error => { console.error(error); process.exit(1) })

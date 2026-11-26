@@ -42,7 +42,6 @@ VERSION : 1.0
    END_VAR
 BEGIN
    IF #FirstScan THEN
-      "DB_FunFairDisplay".Registers[25] := W#16#0001;
       #Sequence := 0;
       #LastSuccess := FALSE;
       #LastError_um := 0;
@@ -81,6 +80,7 @@ BEGIN
    "DB_FunFairDisplay".Registers[8] := UINT_TO_WORD(#Sequence);
    "DB_FunFairDisplay".Registers[9] := BOOL_TO_WORD(#LastSuccess);
    "DB_FunFairDisplay".Registers[24] := #ActiveMode;
+   "DB_FunFairDisplay".Registers[25] := W#16#0000; // Reserved for frame compatibility
    #Values[0] := #ActualPosition_um;
    #Values[1] := #OpenPosition_um;
    #Values[2] := #ClosePosition_um;

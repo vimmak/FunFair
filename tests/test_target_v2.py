@@ -8,7 +8,7 @@ class MovingTarget(unittest.TestCase):
     def setUp(self):
         with patch.object(sim, 'SOURCE', sim.SOURCE.parent / 'v20' / 'FB_FunFairTarget.scl'):
             self.target = sim.ScanModel()
-        self.scan(FirstScan=True, GameState=0, ModeRequest=2,
+        self.scan(FirstScan=True, GameState=0, HighDifficulty=True,
                          ClosePosition_um=22000, OpenPosition_um=1000, FixedTarget_um=13000)
 
     def scan(self, n=1, **values):
@@ -37,9 +37,17 @@ class MovingTarget(unittest.TestCase):
     def test_pause_holds_target_and_defers_switch(self):
         original = self.scan(180, FirstScan=False, GameState=50)['Target_um']
         self.assertEqual(self.scan(PauseDI=True)['Target_um'], original)
-        frame = self.scan(100, PauseDI=False, GameState=80, ModeRequest=1)
+        frame = self.scan(100, PauseDI=False, GameState=80, HighDifficulty=False)
         self.assertEqual((frame['ActiveMode'], frame['Target_um']), (2, original))
-        self.assertEqual(self.scan(GameState=30, ModeRequest=2)['Target_um'], original)
+        self.assertEqual(self.scan(GameState=30, HighDifficulty=True)['Target_um'], original)
         self.assertLess(self.scan(120)['Target_um'], original)
-        frame = self.scan(ModeRequest=1)
+        frame = self.scan(HighDifficulty=False)
+        self.assertEqual((frame['ActiveMode'], frame['Target_um']), (1, 13000))
+
+    def test_bool_change_during_pause_applies_when_motion_resumes(self):
+        self.scan(120, FirstScan=False, GameState=50)
+        frame = self.scan(PauseDI=True, HighDifficulty=False)
+        self.assertEqual(frame['ActiveMode'], 2)
+        self.assertEqual(self.scan(PauseDI=False, GameState=80)['ActiveMode'], 2)
+        frame = self.scan(GameState=30)
         self.assertEqual((frame['ActiveMode'], frame['Target_um']), (1, 13000))
