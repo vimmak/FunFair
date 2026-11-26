@@ -155,3 +155,29 @@ class AutoGame(unittest.TestCase):
         self.scan(DataValid=False)
         self.assertFalse(self.v['ResultValid'])
         self.assertTrue(self.port.command['b_01_STOP'])
+
+    def test_cpu_restart_with_pause_released_during_stop(self):
+        self.pause_at(13000)
+        self.port.b_07_ERROR = True
+        self.scan(FirstScan=True, PauseDI=False)
+        self.scan(FirstScan=False, ResetButton=True)
+        self.assertTrue(self.port.command['b_02_ACKNOLEDGE'])
+        self.port.b_07_ERROR = False
+        self.scan(30)
+        self.assertEqual(self.v['State'], 905)
+        self.port.b_00_READY_FOR_OPERATION = False
+        self.scan(30, ResetButton=False)
+        self.assertFalse(self.port.command['b_13_MOVE_TO_ABSOLUTE_POSITION'])
+        self.port.b_00_READY_FOR_OPERATION = True
+        self.moving()
+
+    def test_startup_ack_with_pause_locked(self):
+        self.port.b_07_ERROR = True
+        self.scan(PauseDI=True)
+        self.scan(ResetButton=True)
+        self.port.b_07_ERROR = False
+        self.scan(30, ResetButton=False)
+        self.assertEqual(self.v['State'], 10)
+        self.assertFalse(self.v['ResultValid'])
+        self.scan(PauseDI=False)
+        self.moving()

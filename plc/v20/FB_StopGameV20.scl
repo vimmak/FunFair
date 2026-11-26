@@ -41,6 +41,7 @@ VERSION : 1.0
       StallTimer : TON_TIME;
       ResetTrigger : R_TRIG;
       ResetReleased : Bool;
+      MoveIssuedThisRun : Bool;
       AckBaseline : Bool;
       TowardsOpen : Bool;
       PauseTarget_um : DInt;
@@ -58,6 +59,7 @@ BEGIN
       #FaultCode := W#16#0000;
       #DeviceAck := FALSE;
       #ResetReleased := FALSE;
+      #MoveIssuedThisRun := FALSE;
       #ResultValid := FALSE;
       #Success := FALSE;
    END_IF;
@@ -70,6 +72,9 @@ BEGIN
       #DeviceAck := FALSE;
    ELSIF #ResetTrigger.Q AND #ResetReleased AND NOT #FirstScan THEN
       #DeviceAck := TRUE;
+      IF NOT #MoveIssuedThisRun THEN
+         #State := 905;
+      END_IF;
    END_IF;
 
    #Healthy := #DataValid AND #Ready AND #FieldbusControl
@@ -89,6 +94,9 @@ BEGIN
    ELSIF NOT #MotionPermit THEN
       #FaultCode := W#16#0009;
       #State := 900;
+   ELSIF (#State = 905) AND #DataValid AND NOT #NotFeasible AND NOT #Healthy THEN
+      // Device ACK sent before first MOVE. Wait for valid ready feedback.
+      #FaultCode := W#16#0001;
    ELSIF NOT #Healthy THEN
       #FaultCode := W#16#0001;
       #State := 900;
@@ -175,6 +183,12 @@ BEGIN
                #Success := FALSE;
                #State := 30;
             END_IF;
+         905:
+            IF NOT #ResetButton THEN
+               #FaultCode := W#16#0000;
+               #TowardsOpen := #ActualPosition_um <> #OpenPosition_um;
+               #State := 10;
+            END_IF;
          900: // After a fault, recover deliberately by locking then releasing pause.
             IF #PauseDI THEN
                #FaultCode := W#16#0000;
@@ -191,8 +205,11 @@ BEGIN
       #Success := FALSE;
    END_IF;
    #MoveAbsolute := (#State = 40) OR (#State = 50);
+   IF #MoveAbsolute THEN
+      #MoveIssuedThisRun := TRUE;
+   END_IF;
    #ControlledStop := (#State = 10) OR (#State = 60) OR (#State = 70) OR (#State = 80)
-      OR ((#State = 900) AND NOT #DeviceAck);
+      OR (((#State = 900) OR (#State = 905)) AND NOT #DeviceAck);
    IF (#State >= 55) AND (#State <= 80) THEN
       #SignedError_um := DINT_TO_LREAL(#ActualPosition_um) - DINT_TO_LREAL(#PauseTarget_um);
    ELSE
