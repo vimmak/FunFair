@@ -94,7 +94,7 @@ BEGIN
    ELSIF NOT #MotionPermit THEN
       #FaultCode := W#16#0009;
       #State := 900;
-   ELSIF (#State = 905) AND #DataValid AND NOT #NotFeasible AND NOT #Healthy THEN
+   ELSIF (#State = 905) AND #DataValid AND NOT #Healthy THEN
       // Device ACK sent before first MOVE. Wait for valid ready feedback.
       #FaultCode := W#16#0001;
    ELSIF NOT #Healthy THEN

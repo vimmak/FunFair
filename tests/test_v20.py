@@ -181,3 +181,19 @@ class AutoGame(unittest.TestCase):
         self.assertFalse(self.v['ResultValid'])
         self.scan(PauseDI=False)
         self.moving()
+
+    def test_startup_ack_waits_for_not_feasible_to_clear(self):
+        self.port.b_07_ERROR = True
+        self.port.i_DIAGNOSIS_ERROR = 0xEF
+        self.port.b_03_NOT_FEASIBLE = True
+        self.scan()
+        self.scan(ResetButton=True)
+        self.assertTrue(self.port.command['b_02_ACKNOLEDGE'])
+        self.port.b_07_ERROR = False
+        self.port.i_DIAGNOSIS_ERROR = 0
+        self.scan(30, ResetButton=False)
+        self.assertEqual(self.v['GripperFaultCode'], 0)
+        self.assertEqual(self.v['State'], 905)
+        self.assertFalse(self.port.command['b_13_MOVE_TO_ABSOLUTE_POSITION'])
+        self.port.b_03_NOT_FEASIBLE = False
+        self.moving()
