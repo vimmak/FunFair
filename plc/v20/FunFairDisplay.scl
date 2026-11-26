@@ -1,0 +1,98 @@
+DATA_BLOCK "DB_FunFairDisplay"
+{ S7_Optimized_Access := 'FALSE' }
+VERSION : 1.0
+   VAR
+      Registers : Array[0..23] of Word;
+   END_VAR
+BEGIN
+END_DATA_BLOCK
+
+FUNCTION_BLOCK "FB_FunFairDisplay"
+VERSION : 1.0
+   VAR_INPUT
+      FirstScan : Bool;
+      State : Int;
+      ResultValid : Bool;
+      Success : Bool;
+      ActualPosition_um : DInt;
+      SignedError_um : LReal;
+      OpenPosition_um : DInt;
+      ClosePosition_um : DInt;
+      TargetPosition_um : DInt;
+      Tolerance_um : DInt;
+      FaultCode : Word;
+      GripperFaultCode : Word;
+   END_VAR
+   VAR
+      PreviousValid : Bool;
+      Sequence : UInt;
+      Heartbeat : UInt;
+      LastSuccess : Bool;
+      LastError_um : DInt;
+      PauseTarget_um : DInt;
+      PauseTolerance_um : DInt;
+      WasPaused : Bool;
+   END_VAR
+   VAR_TEMP
+      Values : Array[0..6] of DInt;
+      Bits : DWord;
+      Index : Int;
+      Paused : Bool;
+   END_VAR
+BEGIN
+   IF #FirstScan THEN
+      #Sequence := 0;
+      #LastSuccess := FALSE;
+      #LastError_um := 0;
+      #PreviousValid := FALSE;
+      #WasPaused := FALSE;
+   END_IF;
+   #Paused := (#State >= 55) AND (#State <= 80);
+   IF #Paused AND NOT #WasPaused THEN
+      #PauseTarget_um := #TargetPosition_um;
+      #PauseTolerance_um := #Tolerance_um;
+   END_IF;
+   #WasPaused := #Paused;
+   IF #ResultValid AND NOT #PreviousValid THEN
+      IF #Sequence = 65535 THEN
+         #Sequence := 1;
+      ELSE
+         #Sequence := #Sequence + 1;
+      END_IF;
+      #LastSuccess := #Success;
+      #LastError_um := LREAL_TO_DINT(#SignedError_um);
+   END_IF;
+   #PreviousValid := #ResultValid;
+   IF #Heartbeat = 65535 THEN
+      #Heartbeat := 0;
+   ELSE
+      #Heartbeat := #Heartbeat + 1;
+   END_IF;
+   "DB_FunFairDisplay".Registers[0] := W#16#4646;
+   "DB_FunFairDisplay".Registers[1] := W#16#0001;
+   "DB_FunFairDisplay".Registers[2] := UINT_TO_WORD(#Heartbeat);
+   "DB_FunFairDisplay".Registers[3] := INT_TO_WORD(#State);
+   "DB_FunFairDisplay".Registers[4] := BOOL_TO_WORD(#ResultValid);
+   "DB_FunFairDisplay".Registers[5] := BOOL_TO_WORD(#Success);
+   "DB_FunFairDisplay".Registers[6] := #FaultCode;
+   "DB_FunFairDisplay".Registers[7] := #GripperFaultCode;
+   "DB_FunFairDisplay".Registers[8] := UINT_TO_WORD(#Sequence);
+   "DB_FunFairDisplay".Registers[9] := BOOL_TO_WORD(#LastSuccess);
+   #Values[0] := #ActualPosition_um;
+   #Values[1] := #OpenPosition_um;
+   #Values[2] := #ClosePosition_um;
+   IF #Paused THEN
+      #Values[3] := #PauseTarget_um;
+      #Values[4] := #PauseTolerance_um;
+   ELSE
+      #Values[3] := #TargetPosition_um;
+      #Values[4] := #Tolerance_um;
+   END_IF;
+   #Values[5] := LREAL_TO_DINT(#SignedError_um);
+   #Values[6] := #LastError_um;
+   FOR #Index := 0 TO 6 DO
+      #Bits := DINT_TO_DWORD(#Values[#Index]);
+      "DB_FunFairDisplay".Registers[10 + 2 * #Index] := DWORD_TO_WORD(SHR(IN := #Bits, N := 16));
+      "DB_FunFairDisplay".Registers[11 + 2 * #Index] := DWORD_TO_WORD(#Bits);
+   END_FOR;
+END_FUNCTION_BLOCK

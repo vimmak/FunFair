@@ -2,6 +2,10 @@
 FunFair for SCHUNK Intec China Christmas Event
 
 
+## 电脑投屏
+
+[第一版安装、TIA 接线与现场验收](docs/Display-V1.md) · [网页和本地通信服务](display)
+
 ## V20：自动往复与暂停判分
 
 导入厂家原生 FB、[游戏块](plc/v20/FB_StopGameV20.scl)、[集成入口](plc/v20/FB_FunFairEGU_V20.scl)。OB1 每扫描调用一次集成入口，使用非保持实例。FirstScan 接首扫位，MotionPermit 接运行许可，DataValid 接实际周期数据有效状态，InputHW、OutputHW 接对应的输入、输出子模块。入口内部调用 SCHUNK 原生块一次。

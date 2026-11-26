@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FunFair · 精准停位挑战</title><link rel="stylesheet" href="/style.css"></head>
+<body><main id="app" v-cloak>
+<header><strong>FunFair<span> / 精准停位挑战</span></strong><div><i :class="{lit: online}"></i>{{ demo ? '回放模式' : 'PLC' }} · {{ online ? '已连接' : '等待连接' }} <button @click="fullscreen">全屏</button></div></header>
+<section class="hero"><div><p>当前状态</p><h1>{{ title }}</h1><p>{{ hint }}</p></div>
+<div class="position"><p>当前位置</p><b>{{ mm(f?.actual) }}</b> mm</div></section>
+<section class="track" aria-label="实际位置和目标窗口">
+<svg viewBox="0 0 1000 165" role="img" aria-label="夹爪行程，浅绿色区域为目标窗口">
+<defs><pattern id="ticks" width="23" height="14" patternUnits="userSpaceOnUse"><path d="M 0 0 V 12" stroke="#7f8eae" stroke-width="2"/></pattern></defs>
+<rect x="40" y="80" width="920" height="32" rx="8" fill="#30394c"/>
+<template v-if="f"><rect :x="band.left" y="67" :width="band.width" height="56" rx="5" fill="#a8ffce" opacity=".64"/>
+<path :d="'M '+x(f.target)+' 56 v74'" stroke="#a8ffce" stroke-dasharray="4 4"/>
+<text :x="x(f.target)" y="43" text-anchor="middle" fill="#b3ffd4">目标</text>
+<rect x="40" y="115" width="920" height="12" fill="url(#ticks)"/>
+<g :transform="'translate('+x(f.actual)+' 0)'"><path d="M -12 64 L 0 79 L 12 64 Z" fill="#ffbd72"/><rect x="-3" y="80" width="6" height="32" rx="3" fill="#ffbd72"/></g>
+<text x="40" y="157" fill="#adb8cc">夹紧 {{ mm(f.close) }}</text><text x="960" y="157" text-anchor="end" fill="#adb8cc">张开 {{ mm(f.open) }} mm</text></template>
+</svg></section>
+<section class="metrics"><article><p>目标位置</p><strong>{{ mm(f?.target) }} <small>mm</small></strong></article><article><p>判定窗口</p><strong>± {{ mm(f?.tolerance) }} <small>mm</small></strong></article><article><p>当前位置偏差</p><strong>{{ signed(f?.error) }} <small>mm</small></strong></article></section>
+<footer><div :key="f?.seq" class="score">{{ f?.seq ? '最近成绩 · '+(f.lastSuccess?'命中':'未命中')+'　'+signed(f.lastError)+' mm' : '等待首轮成绩' }}</div><div>状态 {{ f?.state ?? '—' }}　 游戏 {{ hex(f?.fault) }}　 夹爪 {{ hex(f?.gripperFault) }}</div></footer>
+</main><script type="module" src="/app.js"></script></body></html>
