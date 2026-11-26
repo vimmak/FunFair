@@ -2,14 +2,12 @@ FUNCTION_BLOCK "FB_StopGameV20"
 { S7_Optimized_Access := 'TRUE' }
 VERSION : 0.3
    VAR_INPUT
-      Enable : Bool; // Explicit game enable; a new enable requires a fresh start edge
-      Commissioned : Bool; // Set only after verified limits, units and stop test
       FirstScan : Bool; // TRUE on first OB1 scan after every startup
       MotionPermit : Bool; // Operational permissive, NOT a safety function
       DataValid : Bool; // Fresh/valid PN data; do not hard-wire TRUE
       StartDI : Bool; // Filtered PNP input, pressed = TRUE
       PauseDI : Bool;
-      ResetButton : Bool; // Separate momentary reset; does NOT ack gripper faults
+      ResetButton : Bool; // Momentary reset and manual device fault acknowledgement
       Ready : Bool;
       FieldbusControl : Bool;
       DeviceError : Bool;
@@ -37,7 +35,7 @@ VERSION : 0.3
       EndpointBand_um : DInt := 100;
    END_VAR
    VAR_OUTPUT
-      FastStopRelease : Bool; // Map to b_00_FAST_STOP: TRUE releases fast stop!
+      DeviceAck : Bool; // Vendor acknowledgement, held until error clears or reset is released
       MoveAbsolute : Bool;
       ControlledStop : Bool;
       PositionCommand_um : DInt;
@@ -72,6 +70,7 @@ VERSION : 0.3
       EndpointBandLatched_um : DInt;
       NeedRearm : Bool;
       PendingFault : Word;
+      ResetArmed : Bool;
       Initialized : Bool;
    END_VAR
    VAR_TEMP
@@ -95,6 +94,8 @@ BEGIN
       #PendingFault := W#16#0000;
       #NeedRearm := FALSE;
       #StopAcked := FALSE;
+      #ResetArmed := FALSE;
+      #DeviceAck := FALSE;
       #Initialized := TRUE;
    END_IF;
 
@@ -102,7 +103,15 @@ BEGIN
    #PauseTrigger(CLK := #PauseDI);
    #ResetTimer(IN := #ResetButton AND NOT #FirstScan, PT := #ResetFilter);
    #ResetEdgeDetector(CLK := #ResetTimer.Q);
-   #ResetEdge := #ResetEdgeDetector.Q AND NOT #FirstScan;
+   IF NOT #ResetButton THEN
+      #ResetArmed := TRUE;
+   END_IF;
+   #ResetEdge := #ResetEdgeDetector.Q AND #ResetArmed AND NOT #FirstScan;
+   IF NOT #DataValid OR NOT #MotionPermit OR NOT #DeviceError OR NOT #ResetButton THEN
+      #DeviceAck := FALSE;
+   ELSIF #ResetEdge AND (#State = 900) AND NOT #StartDI AND NOT #PauseDI THEN
+      #DeviceAck := TRUE;
+   END_IF;
    #StartRound := FALSE;
    #RequestStop := FALSE;
 
@@ -144,14 +153,7 @@ BEGIN
       AND (#PositionDelta <= DINT_TO_LREAL(#StableBandLatched_um));
    #StableTimer(IN := #StableNow AND NOT #FirstScan, PT := #StableTime);
 
-   IF NOT #Enable OR NOT #Commissioned THEN
-      #State := 0;
-      #ResultValid := FALSE;
-      #Success := FALSE;
-      #FaultCode := W#16#0000;
-      #StopAcked := FALSE;
-      #PendingFault := W#16#0000;
-   ELSIF NOT #MotionPermit THEN
+   IF NOT #MotionPermit THEN
       #State := 900;
       #FaultCode := W#16#0009;
       #ResultValid := FALSE;
@@ -319,10 +321,9 @@ BEGIN
       #ResultValid := FALSE;
       #Success := FALSE;
    END_IF;
-   #FastStopRelease := #Enable AND #Commissioned AND #MotionPermit
-      AND (#State <> 0) AND (#State <> 900);
-   #MoveAbsolute := #FastStopRelease AND ((#State = 40) OR (#State = 50));
-   #ControlledStop := #FastStopRelease
-      AND ((#State = 60) OR (#State = 70) OR (#State = 80));
+   #MoveAbsolute := (#State = 40) OR (#State = 50);
+   // Loss of motion permission or a fault must also stop an accepted move.
+   #ControlledStop := (#State = 60) OR (#State = 70) OR (#State = 80)
+      OR ((#State = 900) AND NOT #DeviceAck);
    #VelocityCommand_um_s := #VelocityLatched_um_s;
 END_FUNCTION_BLOCK

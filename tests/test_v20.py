@@ -41,3 +41,29 @@ class TwoButtons(unittest.TestCase):
         m.finish_stop()
         m.scan(20, PauseDI=False)
         self.assertEqual(m.v['State'], 80)
+
+    def test_manual_fault_ack_and_separate_restart(self):
+        m = self.m
+        m.scan(DeviceError=True)
+        self.assertTrue(m.v['ControlledStop'])
+        m.scan(8, ResetButton=True)
+        self.assertTrue(m.v['DeviceAck'])
+        self.assertFalse(m.v['ControlledStop'])
+        m.scan(DeviceError=False)
+        self.assertFalse(m.v['DeviceAck'])
+        self.assertEqual(m.v['State'], 900)
+        m.scan(ResetButton=False)
+        m.scan(8, ResetButton=True)
+        self.assertEqual(m.v['State'], 80)
+        self.assertFalse(m.v['MoveAbsolute'])
+
+    def test_permission_loss_stops_accepted_move(self):
+        m = self.m
+        m.scan(20, StartDI=True)
+        m.scan(ReceivedToggle=True)
+        self.assertTrue(m.v['MoveAbsolute'])
+        m.scan(MotionPermit=False)
+        self.assertFalse(m.v['MoveAbsolute'])
+        self.assertTrue(m.v['ControlledStop'])
+        m.scan(MotionPermit=True)
+        self.assertEqual(m.v['State'], 900)

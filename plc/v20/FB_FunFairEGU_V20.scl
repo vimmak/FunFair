@@ -1,8 +1,6 @@
 FUNCTION_BLOCK "FB_FunFairEGU_V20"
 VERSION : 0.1
    VAR_INPUT
-      Enable : Bool;
-      Commissioned : Bool;
       FirstScan : Bool;
       MotionPermit : Bool;
       DataValid : Bool;
@@ -28,11 +26,8 @@ VERSION : 0.1
       EndpointBand_um : DInt := 100;
       InputHW : HW_IO;
       OutputHW : HW_IO;
-      ServiceFastRelease : Bool;
-      ServiceAck : Bool;
    END_VAR
    VAR_OUTPUT
-      FastStopRelease : Bool;
       MoveAbsolute : Bool;
       ControlledStop : Bool;
       PositionCommand_um : DInt;
@@ -50,14 +45,8 @@ VERSION : 0.1
       Game : "FB_StopGameV20";
       EGU : "FB_SFP_EGU_EGK_Profinet_Cyclic_DATA";
    END_VAR
-   VAR_TEMP
-      FastRelease : Bool;
-      Ack : Bool;
-   END_VAR
 BEGIN
-   #Game(Enable := #Enable,
-         Commissioned := #Commissioned,
-         FirstScan := #FirstScan,
+   #Game(FirstScan := #FirstScan,
          MotionPermit := #MotionPermit,
          DataValid := #DataValid,
          StartDI := #StartDI,
@@ -88,16 +77,10 @@ BEGIN
          StableTime := #StableTime,
          StableBand_um := #StableBand_um,
          EndpointBand_um := #EndpointBand_um);
-   #FastRelease := #Game.FastStopRelease;
-   #Ack := FALSE;
-   IF NOT #Enable AND #Commissioned AND #MotionPermit AND #DataValid AND NOT #FirstScan THEN
-      #FastRelease := #ServiceFastRelease;
-      #Ack := #ServiceAck AND #FastRelease;
-   END_IF;
    #EGU(b_RELEASE_FUNCTION_BLOCK := TRUE,
-        b_00_FAST_STOP := #FastRelease,
+        b_00_FAST_STOP := TRUE,
         b_01_STOP := #Game.ControlledStop,
-        b_02_ACKNOLEDGE := #Ack,
+        b_02_ACKNOLEDGE := #Game.DeviceAck,
         b_03_PREPARE_FOR_SHUTDOWN := FALSE,
         b_04_SOFTRESET := FALSE,
         b_05_RELEASE_FOR_MANUAL_MOVEMENT := FALSE,
@@ -117,7 +100,6 @@ BEGIN
         di_GRIPPING_FORCE := 0,
         HW_ADDRESS_INPUT := #InputHW,
         HW_ADDRESS_OUTPUT := #OutputHW);
-   #FastStopRelease := #Game.FastStopRelease;
    #MoveAbsolute := #Game.MoveAbsolute;
    #ControlledStop := #Game.ControlledStop;
    #PositionCommand_um := #Game.PositionCommand_um;
