@@ -1,11 +1,10 @@
 FUNCTION_BLOCK "FB_StopGameV20"
 { S7_Optimized_Access := 'TRUE' }
-VERSION : 0.3
+VERSION : 1.0
    VAR_INPUT
       FirstScan : Bool; // TRUE on first OB1 scan after every startup
       MotionPermit : Bool; // Operational permissive, NOT a safety function
       DataValid : Bool; // Fresh/valid PN data; do not hard-wire TRUE
-      StartDI : Bool; // Filtered PNP input, pressed = TRUE
       PauseDI : Bool;
       ResetButton : Bool; // Momentary reset and manual device fault acknowledgement
       Ready : Bool;
@@ -16,200 +15,113 @@ VERSION : 0.3
       PositionReached : Bool;
       ReceivedToggle : Bool;
       ActualPosition_um : DInt;
-      LowPosition_um : DInt;
-      HighPosition_um : DInt;
+      ClosePosition_um : DInt;
+      OpenPosition_um : DInt;
       TargetPosition_um : DInt;
       Tolerance_um : DInt; // Strict less-than; half width of success window
       Velocity_um_s : DInt;
-      VerifiedMin_um : DInt; // From commissioned gripper parameters
-      VerifiedMax_um : DInt;
-      VerifiedMinVelocity_um_s : DInt;
-      VerifiedMaxVelocity_um_s : DInt;
-      ResetFilter : Time := T#20ms;
-      CommandGap : Time := T#50ms; // Must exceed validated PN output update time
-      AckTimeout : Time := T#1s;
-      MoveTimeout : Time := T#15s;
-      StopTimeout : Time := T#3s;
-      StableTime : Time := T#200ms; // Post-ack position stability window
-      StableBand_um : DInt := 20; // Whole-window deviation from anchor
-      EndpointBand_um : DInt := 100;
    END_VAR
    VAR_OUTPUT
-      DeviceAck : Bool; // Vendor acknowledgement, held until error clears or reset is released
       MoveAbsolute : Bool;
       ControlledStop : Bool;
+      DeviceAck : Bool;
       PositionCommand_um : DInt;
       VelocityCommand_um_s : DInt;
-      State : Int; // 0 waiting for initial feedback,10 release both,20 wait start,30 move gap,40 move ack,
-                   // 50 moving,55 drain move ack,60 stop ack,70 settling,80 result,900 fault
+      SignedError_um : LReal;
       ResultValid : Bool;
       Success : Bool;
-      FinalPosition_um : DInt;
-      SignedError_um : DInt;
-      RoundTarget_um : DInt;
-      RoundTolerance_um : DInt;
-      FaultCode : Word; // Application codes; see README
+      State : Int;
+      FaultCode : Word;
    END_VAR
    VAR
-      ResetTimer : TON_TIME;
       GapTimer : TON_TIME;
       AckTimer : TON_TIME;
-      MoveTimer : TON_TIME;
       StopTimer : TON_TIME;
       StableTimer : TON_TIME;
-      PauseTrigger : R_TRIG;
-      StartTrigger : R_TRIG;
-      ResetEdgeDetector : R_TRIG;
+      StallTimer : TON_TIME;
+      ResetTrigger : R_TRIG;
+      ResetReleased : Bool;
       AckBaseline : Bool;
-      StopAcked : Bool;
+      TowardsOpen : Bool;
+      PauseTarget_um : DInt;
+      PauseWindow_um : DInt;
       StableAnchor_um : DInt;
-      LowLatched_um : DInt;
-      HighLatched_um : DInt;
-      VelocityLatched_um_s : DInt;
-      StableBandLatched_um : DInt;
-      EndpointBandLatched_um : DInt;
-      NeedRearm : Bool;
-      PendingFault : Word;
-      ResetArmed : Bool;
-      Initialized : Bool;
+      PreviousPosition_um : DInt;
    END_VAR
    VAR_TEMP
-      StartRound : Bool;
-      RequestStop : Bool;
-      ResetEdge : Bool;
-      ConfigValid : Bool;
       Healthy : Bool;
-      StableNow : Bool;
-      ActiveRound : Bool;
-      PositionDelta : LReal;
+      Stable : Bool;
    END_VAR
 BEGIN
-   // All instance data must be NON-RETAIN. Call once, every OB1 scan.
-   // FirstScan is required even if Initialized is already TRUE in memory.
-   IF #FirstScan OR NOT #Initialized THEN
+   IF #FirstScan THEN
       #State := 0;
+      #FaultCode := W#16#0000;
+      #DeviceAck := FALSE;
+      #ResetReleased := FALSE;
       #ResultValid := FALSE;
       #Success := FALSE;
-      #FaultCode := W#16#0000;
-      #PendingFault := W#16#0000;
-      #NeedRearm := FALSE;
-      #StopAcked := FALSE;
-      #ResetArmed := FALSE;
-      #DeviceAck := FALSE;
-      #Initialized := TRUE;
    END_IF;
 
-   #StartTrigger(CLK := #StartDI);
-   #PauseTrigger(CLK := #PauseDI);
-   #ResetTimer(IN := #ResetButton AND NOT #FirstScan, PT := #ResetFilter);
-   #ResetEdgeDetector(CLK := #ResetTimer.Q);
+   #ResetTrigger(CLK := #ResetButton);
    IF NOT #ResetButton THEN
-      #ResetArmed := TRUE;
+      #ResetReleased := TRUE;
    END_IF;
-   #ResetEdge := #ResetEdgeDetector.Q AND #ResetArmed AND NOT #FirstScan;
-   IF NOT #DataValid OR NOT #MotionPermit OR NOT #DeviceError OR NOT #ResetButton THEN
+   IF NOT #ResetButton OR NOT #DeviceError OR NOT #DataValid OR NOT #MotionPermit THEN
       #DeviceAck := FALSE;
-   ELSIF #ResetEdge AND (#State = 900) AND NOT #StartDI AND NOT #PauseDI THEN
+   ELSIF #ResetTrigger.Q AND #ResetReleased AND NOT #FirstScan THEN
       #DeviceAck := TRUE;
    END_IF;
-   #StartRound := FALSE;
-   #RequestStop := FALSE;
 
-   #ConfigValid := (#VerifiedMin_um >= 0)
-      AND (#VerifiedMax_um <= 1000000)
-      AND (#LowPosition_um >= #VerifiedMin_um)
-      AND (#HighPosition_um <= #VerifiedMax_um)
-      AND (#LowPosition_um < #HighPosition_um)
-      AND (#TargetPosition_um >= #LowPosition_um)
-      AND (#TargetPosition_um <= #HighPosition_um)
-      AND (#Tolerance_um > 0) AND (#Tolerance_um <= 1000000)
-      AND (#VerifiedMinVelocity_um_s > 0)
-      AND (#Velocity_um_s >= #VerifiedMinVelocity_um_s)
-      AND (#Velocity_um_s <= #VerifiedMaxVelocity_um_s)
-      AND (#StableBand_um >= 0) AND (#StableBand_um <= 1000000)
-      AND (#EndpointBand_um >= 0)
-      AND (#EndpointBand_um < (#HighPosition_um - #LowPosition_um))
-      AND (#ResetFilter > T#0ms) AND (#CommandGap > T#0ms)
-      AND (#AckTimeout > T#0ms) AND (#MoveTimeout > #AckTimeout)
-      AND (#StableTime > T#0ms) AND (#StopTimeout > #StableTime);
    #Healthy := #DataValid AND #Ready AND #FieldbusControl
       AND NOT #DeviceError AND NOT #NotFeasible;
-   #ActiveRound := (#State >= 30) AND (#State <= 70);
+   #GapTimer(IN := (#State = 30) AND NOT #FirstScan, PT := T#50ms);
+   #AckTimer(IN := ((#State = 40) OR (#State = 55)) AND NOT #FirstScan, PT := T#1s);
+   #StopTimer(IN := (#State >= 55) AND (#State <= 70) AND NOT #FirstScan, PT := T#3s);
+   #StallTimer(IN := (#State = 50) AND (#PreviousPosition_um = #ActualPosition_um), PT := T#15s);
+   #PreviousPosition_um := #ActualPosition_um;
+   #Stable := (#State = 70) AND #CommandDone AND #Healthy
+      AND (ABS(DINT_TO_LREAL(#ActualPosition_um) - DINT_TO_LREAL(#StableAnchor_um)) <= 20);
+   #StableTimer(IN := #Stable, PT := T#200ms);
 
-   // Timers are called in every scan, including reset/disable paths.
-   #GapTimer(IN := (#State = 30) AND NOT #FirstScan, PT := #CommandGap);
-   #AckTimer(IN := ((#State = 40) OR (#State = 55)) AND NOT #FirstScan,
-             PT := #AckTimeout);
-   #MoveTimer(IN := ((#State = 40) OR (#State = 50)) AND NOT #FirstScan,
-              PT := #MoveTimeout);
-   #StopTimer(IN := ((#State = 55) OR (#State = 60) OR (#State = 70)) AND NOT #FirstScan,
-              PT := #StopTimeout);
-
-   // Anchor-based stability catches accumulated drift, unlike adjacent-scan delta.
-   #PositionDelta := ABS(DINT_TO_LREAL(#ActualPosition_um)
-                         - DINT_TO_LREAL(#StableAnchor_um));
-   #StableNow := (#State = 70) AND #StopAcked AND #Healthy
-      AND #CommandDone AND #PositionReached
-      AND (#PositionDelta <= DINT_TO_LREAL(#StableBandLatched_um));
-   #StableTimer(IN := #StableNow AND NOT #FirstScan, PT := #StableTime);
-
-   // The wrapper reads EGU feedback from the previous scan. Wait for
-   // first valid feedback before arming. Explicit device faults still latch.
-   IF (#State = 0) AND (NOT #DataValid OR
-      (NOT #DeviceError AND NOT #NotFeasible AND
-       (NOT #Ready OR NOT #FieldbusControl OR NOT #MotionPermit))) THEN
+   IF (#State = 0) AND (NOT #DataValid OR (NOT #DeviceError AND NOT #NotFeasible
+      AND (NOT #Healthy OR NOT #MotionPermit))) THEN
       #State := 0;
    ELSIF NOT #MotionPermit THEN
-      #State := 900;
       #FaultCode := W#16#0009;
-      #ResultValid := FALSE;
-      #Success := FALSE;
+      #State := 900;
    ELSIF NOT #Healthy THEN
-      #State := 900;
       #FaultCode := W#16#0001;
-      #ResultValid := FALSE;
-      #Success := FALSE;
-   ELSIF (#ActualPosition_um < #VerifiedMin_um)
-      OR (#ActualPosition_um > #VerifiedMax_um) THEN
       #State := 900;
-      #FaultCode := W#16#0006;
-      #ResultValid := FALSE;
-      #Success := FALSE;
+   ELSIF (#OpenPosition_um = #ClosePosition_um) OR (#Velocity_um_s <= 0) OR (#Tolerance_um <= 0) THEN
+      #FaultCode := W#16#0002;
+      #State := 900;
    ELSE
-      // Fault recovery requires an explicit game reset after driver recovery.
-      // Restoring communications alone must not re-start automatic motion.
-      IF #ResetEdge AND #ActiveRound THEN
-         #PendingFault := W#16#0007;
-         #NeedRearm := TRUE;
-         IF (#State <> 55) AND (#State <> 60) AND (#State <> 70) THEN
-            #RequestStop := TRUE;
-         END_IF;
-      ELSIF #PauseTrigger.Q AND ((#State = 30) OR (#State = 40) OR (#State = 50)) THEN
-         #RequestStop := TRUE;
-      END_IF;
-      IF #RequestStop THEN
-         #StopAcked := FALSE;
+      IF #PauseDI AND ((#State = 30) OR (#State = 40) OR (#State = 50)) THEN
+         #PauseTarget_um := #TargetPosition_um;
+         #PauseWindow_um := #Tolerance_um;
          IF #State = 40 THEN
-            // Preserve the MOVE baseline: do not call a late MOVE ack a STOP ack.
-            // Stop is issued only after this outstanding acknowledgement is drained.
             #State := 55;
          ELSE
             #AckBaseline := #ReceivedToggle;
             #State := 60;
          END_IF;
       END_IF;
-
       CASE #State OF
          0:
+            #TowardsOpen := #ActualPosition_um <> #OpenPosition_um;
             #State := 10;
-         10:
-            IF NOT #StartDI AND NOT #PauseDI THEN
-               #State := 20;
+         10: // Initial pause or fault recovery has no game score.
+            IF NOT #PauseDI THEN
+               #State := 30;
             END_IF;
-         20:
-            #StartRound := #StartTrigger.Q AND NOT #PauseDI AND NOT #ResetButton;
-         30: // All movement command bits low before each new absolute move.
+         30:
             IF #GapTimer.Q THEN
+               IF #TowardsOpen THEN
+                  #PositionCommand_um := #OpenPosition_um;
+               ELSE
+                  #PositionCommand_um := #ClosePosition_um;
+               END_IF;
+               #VelocityCommand_um_s := #Velocity_um_s;
                #AckBaseline := #ReceivedToggle;
                #State := 40;
             END_IF;
@@ -221,21 +133,15 @@ BEGIN
                #State := 900;
             END_IF;
          50:
-            IF #MoveTimer.Q THEN
+            IF #PositionReached AND #CommandDone
+               AND (ABS(DINT_TO_LREAL(#ActualPosition_um) - DINT_TO_LREAL(#PositionCommand_um)) <= 100) THEN
+               #TowardsOpen := NOT #TowardsOpen;
+               #State := 30;
+            ELSIF #StallTimer.Q THEN
                #FaultCode := W#16#0004;
                #State := 900;
-            ELSIF #CommandDone AND #PositionReached
-               AND (ABS(DINT_TO_LREAL(#ActualPosition_um)
-                  - DINT_TO_LREAL(#PositionCommand_um))
-                    <= DINT_TO_LREAL(#EndpointBandLatched_um)) THEN
-               IF #PositionCommand_um = #HighLatched_um THEN
-                  #PositionCommand_um := #LowLatched_um;
-               ELSE
-                  #PositionCommand_um := #HighLatched_um;
-               END_IF;
-               #State := 30;
             END_IF;
-         55: // No new command until the in-flight MOVE ack has been accounted for.
+         55: // Consume any pending MOVE acknowledgement before issuing STOP.
             IF #ReceivedToggle <> #AckBaseline THEN
                #AckBaseline := #ReceivedToggle;
                #State := 60;
@@ -245,11 +151,10 @@ BEGIN
             END_IF;
          60:
             IF #ReceivedToggle <> #AckBaseline THEN
-               #StopAcked := TRUE;
                #StableAnchor_um := #ActualPosition_um;
                #State := 70;
             ELSIF #StopTimer.Q THEN
-               #FaultCode := W#16#0003;
+               #FaultCode := W#16#0005;
                #State := 900;
             END_IF;
          70:
@@ -257,83 +162,40 @@ BEGIN
                #FaultCode := W#16#0005;
                #State := 900;
             ELSIF #StableTimer.Q THEN
-               IF #NeedRearm THEN
-                  #ResultValid := FALSE;
-                  #Success := FALSE;
-                  #FaultCode := #PendingFault;
-               ELSE
-                  #FinalPosition_um := #ActualPosition_um;
-                  #SignedError_um := #FinalPosition_um - #RoundTarget_um;
-                  #Success := ABS(DINT_TO_LREAL(#SignedError_um))
-                     < DINT_TO_LREAL(#RoundTolerance_um);
-                  #ResultValid := TRUE;
-               END_IF;
+               #ResultValid := TRUE;
+               #Success := ABS(DINT_TO_LREAL(#ActualPosition_um) - DINT_TO_LREAL(#PauseTarget_um))
+                  < DINT_TO_LREAL(#PauseWindow_um);
                #State := 80;
-            ELSIF NOT #StableNow THEN
+            ELSIF NOT #Stable THEN
                #StableAnchor_um := #ActualPosition_um;
             END_IF;
          80:
-            IF #ResetEdge THEN
+            IF NOT #PauseDI THEN
                #ResultValid := FALSE;
                #Success := FALSE;
-               #FaultCode := W#16#0000;
-            ELSIF #StartTrigger.Q AND NOT #PauseDI AND NOT #ResetButton THEN
-               #StartRound := TRUE;
+               #State := 30;
             END_IF;
-         900:
-            #ResultValid := FALSE;
-            #Success := FALSE;
-            IF #ResetEdge AND NOT #StartDI AND NOT #PauseDI
-               AND #Healthy THEN
-               IF #ConfigValid THEN
-                  #FaultCode := W#16#0000;
-                  #State := 80;
-               ELSE
-                  #FaultCode := W#16#0002;
-               END_IF;
+         900: // After a fault, recover deliberately by locking then releasing pause.
+            IF #PauseDI THEN
+               #FaultCode := W#16#0000;
+               #TowardsOpen := #ActualPosition_um <> #OpenPosition_um;
+               #State := 10;
             END_IF;
          ELSE
             #State := 900;
             #FaultCode := W#16#0008;
       END_CASE;
-
-      IF #StartRound THEN
-         IF #ConfigValid THEN
-            #LowLatched_um := #LowPosition_um;
-            #HighLatched_um := #HighPosition_um;
-            #VelocityLatched_um_s := #Velocity_um_s;
-            #RoundTarget_um := #TargetPosition_um;
-            #RoundTolerance_um := #Tolerance_um;
-            #StableBandLatched_um := #StableBand_um;
-            #EndpointBandLatched_um := #EndpointBand_um;
-            // Start towards HIGH, except when already within its endpoint band.
-            IF ABS(DINT_TO_LREAL(#ActualPosition_um) - DINT_TO_LREAL(#HighPosition_um))
-               <= DINT_TO_LREAL(#EndpointBand_um) THEN
-               #PositionCommand_um := #LowPosition_um;
-            ELSE
-               #PositionCommand_um := #HighPosition_um;
-            END_IF;
-            #ResultValid := FALSE;
-            #Success := FALSE;
-            #FaultCode := W#16#0000;
-            #PendingFault := W#16#0000;
-            #NeedRearm := FALSE;
-            #State := 30;
-         ELSE
-            #FaultCode := W#16#0002;
-            #State := 900;
-         END_IF;
-      END_IF;
    END_IF;
-
-   // Decode AFTER all transitions: stop wins over a move in the same scan.
-   IF (#State = 0) OR (#State = 900) THEN
+   IF #State = 900 THEN
       #ResultValid := FALSE;
       #Success := FALSE;
    END_IF;
    #MoveAbsolute := (#State = 40) OR (#State = 50);
-   // Loss of motion permission or a fault must also stop an accepted move.
-   #ControlledStop := (#State = 60) OR (#State = 70) OR (#State = 80)
+   #ControlledStop := (#State = 10) OR (#State = 60) OR (#State = 70) OR (#State = 80)
       OR ((#State = 900) AND NOT #DeviceAck);
-   #VelocityCommand_um_s := #VelocityLatched_um_s;
+   IF (#State >= 55) AND (#State <= 80) THEN
+      #SignedError_um := DINT_TO_LREAL(#ActualPosition_um) - DINT_TO_LREAL(#PauseTarget_um);
+   ELSE
+      #SignedError_um := DINT_TO_LREAL(#ActualPosition_um) - DINT_TO_LREAL(#TargetPosition_um);
+   END_IF;
 END_FUNCTION_BLOCK

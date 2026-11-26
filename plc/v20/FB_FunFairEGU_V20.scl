@@ -1,21 +1,16 @@
 FUNCTION_BLOCK "FB_FunFairEGU_V20"
-VERSION : 0.1
+VERSION : 1.0
    VAR_INPUT
       FirstScan : Bool;
       MotionPermit : Bool;
       DataValid : Bool;
-      StartDI : Bool;
       PauseDI : Bool;
       ResetButton : Bool;
-      LowPosition_um : DInt;
-      HighPosition_um : DInt;
+      ClosePosition_um : DInt;
+      OpenPosition_um : DInt;
       TargetPosition_um : DInt;
       Tolerance_um : DInt;
       Velocity_um_s : DInt;
-      VerifiedMin_um : DInt;
-      VerifiedMax_um : DInt;
-      VerifiedMinVelocity_um_s : DInt;
-      VerifiedMaxVelocity_um_s : DInt;
       InputHW : HW_IO;
       OutputHW : HW_IO;
    END_VAR
@@ -23,10 +18,9 @@ VERSION : 0.1
       State : Int;
       ResultValid : Bool;
       Success : Bool;
-      FinalPosition_um : DInt;
-      SignedError_um : DInt;
-      RoundTarget_um : DInt;
-      RoundTolerance_um : DInt;
+      ActualPosition_um : DInt;
+      SignedError_um : LReal;
+      GripperFaultCode : Word;
       FaultCode : Word;
    END_VAR
    VAR
@@ -37,7 +31,6 @@ BEGIN
    #Game(FirstScan := #FirstScan,
          MotionPermit := #MotionPermit,
          DataValid := #DataValid,
-         StartDI := #StartDI,
          PauseDI := #PauseDI,
          ResetButton := #ResetButton,
          Ready := #EGU.b_00_READY_FOR_OPERATION,
@@ -48,15 +41,14 @@ BEGIN
          PositionReached := #EGU.b_13_POSITION_REACHED,
          ReceivedToggle := #EGU.b_05_COMMAND_RECEIVED_TOGGLE,
          ActualPosition_um := #EGU.di_ACTUAL_POSITION,
-         LowPosition_um := #LowPosition_um,
-         HighPosition_um := #HighPosition_um,
+         ClosePosition_um := #ClosePosition_um,
+         OpenPosition_um := #OpenPosition_um,
          TargetPosition_um := #TargetPosition_um,
          Tolerance_um := #Tolerance_um,
-         Velocity_um_s := #Velocity_um_s,
-         VerifiedMin_um := #VerifiedMin_um,
-         VerifiedMax_um := #VerifiedMax_um,
-         VerifiedMinVelocity_um_s := #VerifiedMinVelocity_um_s,
-         VerifiedMaxVelocity_um_s := #VerifiedMaxVelocity_um_s);
+         Velocity_um_s := #Velocity_um_s);
+   // Use one feedback sample for the displayed position, delta, score and diagnostics.
+   #ActualPosition_um := #EGU.di_ACTUAL_POSITION;
+   #GripperFaultCode := #EGU.i_DIAGNOSIS_ERROR;
    #EGU(b_RELEASE_FUNCTION_BLOCK := TRUE,
         b_00_FAST_STOP := TRUE,
         b_01_STOP := #Game.ControlledStop,
@@ -83,9 +75,6 @@ BEGIN
    #State := #Game.State;
    #ResultValid := #Game.ResultValid;
    #Success := #Game.Success;
-   #FinalPosition_um := #Game.FinalPosition_um;
    #SignedError_um := #Game.SignedError_um;
-   #RoundTarget_um := #Game.RoundTarget_um;
-   #RoundTolerance_um := #Game.RoundTolerance_um;
    #FaultCode := #Game.FaultCode;
 END_FUNCTION_BLOCK
