@@ -247,3 +247,26 @@ class AutoGame(unittest.TestCase):
         self.assertEqual(self.lights(), (True, False, False))
         self.scan(52)
         self.assertEqual(self.lights(), (False, True, False))
+
+    def test_pause_result_selects_lamp_and_requires_reset(self):
+        for position, success, lit in (
+            (13000, True, (False, False, True)),
+            (15000, False, (True, False, False)),
+        ):
+            with self.subTest(success=success):
+                self.pause_at(position)
+                self.assertEqual(self.v['State'], 80)
+                self.assertEqual(self.v['Success'], success)
+                self.assertEqual(self.lights(), lit)
+                self.scan(PauseDI=True)
+                self.scan(PauseDI=False)
+                self.scan(50)
+                self.assertEqual(self.lights(), (False, False, False))
+                self.scan(52)
+                self.assertEqual(self.lights(), lit)
+                self.assertEqual(self.v['State'], 80)
+                self.assertTrue(self.port.command['b_01_STOP'])
+                self.press_reset()
+                self.assertEqual(self.v['State'], 30)
+                self.assertFalse(self.v['ResultValid'])
+                self.assertEqual(self.lights(), (True, False, False))

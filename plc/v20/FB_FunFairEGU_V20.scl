@@ -92,7 +92,7 @@ BEGIN
    #LampMode := 0;
    IF (#State = 30) OR (#State = 40) OR (#State = 50) THEN
       #LampMode := 1;
-   ELSIF #State = 80 THEN
+   ELSIF (#State = 80) AND #ResultValid THEN
       #LampMode := 2;
    END_IF;
    #LampTimer(IN := NOT #FirstScan AND (#LampMode <> 0)
@@ -108,7 +108,8 @@ BEGIN
       END_IF;
    END_IF;
    #PreviousLampMode := #LampMode;
-   #LampDO0 := (#LampMode <> 0) AND (#LampStep = 0);
+   #LampDO0 := (#LampStep = 0) AND ((#LampMode = 1) OR ((#LampMode = 2) AND NOT #Success));
    #LampDO1 := (#LampMode = 1) AND (#LampStep = 1);
-   #LampDO2 := (#LampMode = 1) AND (#LampStep = 2);
+   #LampDO2 := ((#LampMode = 1) AND (#LampStep = 2))
+      OR ((#LampMode = 2) AND (#LampStep = 0) AND #Success);
 END_FUNCTION_BLOCK
