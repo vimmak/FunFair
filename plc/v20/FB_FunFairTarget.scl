@@ -2,7 +2,6 @@ FUNCTION_BLOCK "FB_FunFairTarget"
 VERSION : 1.0
    VAR_INPUT
       FirstScan : Bool;
-      PauseDI : Bool;
       GameState : Int; // Game instance output from the previous OB1 scan
       ClosePosition_um : DInt;
       OpenPosition_um : DInt;
@@ -40,7 +39,7 @@ BEGIN
    END_IF;
    // Vary the initial sequence with the scan at which the player selects V2.
    #RandomState := (25173 * #RandomState + 13849) MOD 65536;
-   #CanRun := NOT #FirstScan AND NOT #PauseDI
+   #CanRun := NOT #FirstScan
       AND ((#GameState = 30) OR (#GameState = 40) OR (#GameState = 50));
    IF #HighDifficulty THEN
       #RequestedMode := W#16#0002;

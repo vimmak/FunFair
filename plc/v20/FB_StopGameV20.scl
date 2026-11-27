@@ -5,8 +5,8 @@ VERSION : 1.0
       FirstScan : Bool; // TRUE on first OB1 scan after every startup
       MotionPermit : Bool; // Operational permissive, NOT a safety function
       DataValid : Bool; // Fresh/valid PN data; do not hard-wire TRUE
-      PauseDI : Bool;
-      ResetButton : Bool; // Momentary reset and manual device fault acknowledgement
+      PauseDI : Bool; // Filtered momentary input, active high
+      ResetButton : Bool; // Filtered momentary input, active high
       Ready : Bool;
       FieldbusControl : Bool;
       DeviceError : Bool;
@@ -39,9 +39,11 @@ VERSION : 1.0
       StopTimer : TON_TIME;
       StableTimer : TON_TIME;
       StallTimer : TON_TIME;
+      RecoveryTimer : TON_TIME;
+      PauseTrigger : R_TRIG;
       ResetTrigger : R_TRIG;
       ResetReleased : Bool;
-      MoveIssuedThisRun : Bool;
+      RecoveryRunRequested : Bool;
       AckBaseline : Bool;
       TowardsOpen : Bool;
       PauseTarget_um : DInt;
@@ -50,6 +52,7 @@ VERSION : 1.0
       PreviousPosition_um : DInt;
    END_VAR
    VAR_TEMP
+      ResetPressed : Bool;
       Healthy : Bool;
       Stable : Bool;
    END_VAR
@@ -59,22 +62,16 @@ BEGIN
       #FaultCode := W#16#0000;
       #DeviceAck := FALSE;
       #ResetReleased := FALSE;
-      #MoveIssuedThisRun := FALSE;
+      #RecoveryRunRequested := FALSE;
       #ResultValid := FALSE;
       #Success := FALSE;
    END_IF;
 
+   #PauseTrigger(CLK := #PauseDI);
    #ResetTrigger(CLK := #ResetButton);
+   #ResetPressed := #ResetTrigger.Q AND #ResetReleased AND NOT #PauseDI AND NOT #FirstScan;
    IF NOT #ResetButton THEN
       #ResetReleased := TRUE;
-   END_IF;
-   IF NOT #ResetButton OR NOT #DeviceError OR NOT #DataValid OR NOT #MotionPermit THEN
-      #DeviceAck := FALSE;
-   ELSIF #ResetTrigger.Q AND #ResetReleased AND NOT #FirstScan THEN
-      #DeviceAck := TRUE;
-      IF NOT #MoveIssuedThisRun THEN
-         #State := 905;
-      END_IF;
    END_IF;
 
    #Healthy := #DataValid AND #Ready AND #FieldbusControl
@@ -88,23 +85,46 @@ BEGIN
       AND (ABS(DINT_TO_LREAL(#ActualPosition_um) - DINT_TO_LREAL(#StableAnchor_um)) <= 20);
    #StableTimer(IN := #Stable, PT := T#200ms);
 
-   IF (#State = 0) AND (NOT #DataValid OR (NOT #DeviceError AND NOT #NotFeasible
-      AND (NOT #Healthy OR NOT #MotionPermit))) THEN
+   #RecoveryTimer(IN := (#State = 905) AND NOT #FirstScan, PT := T#3s);
+   #DeviceAck := FALSE;
+   IF (#State = 0) AND (NOT #DataValid OR
+      (NOT #DeviceError AND NOT #NotFeasible AND (NOT #Healthy OR NOT #MotionPermit))) THEN
       #State := 0;
    ELSIF NOT #MotionPermit THEN
       #FaultCode := W#16#0009;
       #State := 900;
-   ELSIF (#State = 905) AND #DataValid AND NOT #Healthy THEN
-      // Device ACK sent before first MOVE. Wait for valid ready feedback.
-      #FaultCode := W#16#0001;
-   ELSIF NOT #Healthy THEN
+   ELSIF NOT #DataValid THEN
       #FaultCode := W#16#0001;
       #State := 900;
+   ELSIF (#State = 905) AND NOT #Healthy THEN
+      // Keep ACK active until the error clears, even if the operator releases Reset.
+      IF #PauseTrigger.Q THEN
+         #RecoveryRunRequested := FALSE;
+      END_IF;
+      IF #RecoveryTimer.Q THEN
+         #FaultCode := W#16#000A;
+         #State := 900;
+      ELSE
+         #DeviceAck := #DeviceError;
+      END_IF;
+   ELSIF NOT #Healthy THEN
+      IF #State <> 900 THEN
+         #FaultCode := W#16#0001;
+      END_IF;
+      #State := 900;
+      IF #ResetPressed AND #DeviceError THEN
+         #DeviceAck := TRUE;
+         #RecoveryRunRequested := TRUE;
+         #State := 905;
+      END_IF;
    ELSIF (#OpenPosition_um = #ClosePosition_um) OR (#Velocity_um_s <= 0) OR (#Tolerance_um <= 0) THEN
       #FaultCode := W#16#0002;
       #State := 900;
    ELSE
-      IF #PauseDI AND ((#State = 30) OR (#State = 40) OR (#State = 50)) THEN
+      IF #State = 0 THEN
+         #State := 10;
+      END_IF;
+      IF #PauseTrigger.Q AND ((#State = 30) OR (#State = 40) OR (#State = 50)) THEN
          #PauseTarget_um := #TargetPosition_um;
          #PauseWindow_um := #Tolerance_um;
          IF #State = 40 THEN
@@ -115,11 +135,9 @@ BEGIN
          END_IF;
       END_IF;
       CASE #State OF
-         0:
-            #TowardsOpen := #ActualPosition_um <> #OpenPosition_um;
-            #State := 10;
-         10: // Initial pause or fault recovery has no game score.
-            IF NOT #PauseDI THEN
+         10: // Ready; wait for an explicit start after CPU startup.
+            IF #ResetPressed THEN
+               #TowardsOpen := #ActualPosition_um <> #OpenPosition_um;
                #State := 30;
             END_IF;
          30:
@@ -178,22 +196,24 @@ BEGIN
                #StableAnchor_um := #ActualPosition_um;
             END_IF;
          80:
-            IF NOT #PauseDI THEN
+            IF #ResetPressed THEN
                #ResultValid := FALSE;
                #Success := FALSE;
                #State := 30;
             END_IF;
          905:
-            IF NOT #ResetButton THEN
-               #FaultCode := W#16#0000;
+            #FaultCode := W#16#0000;
+            IF #RecoveryRunRequested AND NOT #PauseDI THEN
                #TowardsOpen := #ActualPosition_um <> #OpenPosition_um;
+               #State := 30;
+            ELSE
                #State := 10;
             END_IF;
-         900: // After a fault, recover deliberately by locking then releasing pause.
-            IF #PauseDI THEN
+         900:
+            IF #ResetPressed THEN
                #FaultCode := W#16#0000;
                #TowardsOpen := #ActualPosition_um <> #OpenPosition_um;
-               #State := 10;
+               #State := 30;
             END_IF;
          ELSE
             #State := 900;
@@ -205,11 +225,7 @@ BEGIN
       #Success := FALSE;
    END_IF;
    #MoveAbsolute := (#State = 40) OR (#State = 50);
-   IF #MoveAbsolute THEN
-      #MoveIssuedThisRun := TRUE;
-   END_IF;
-   #ControlledStop := (#State = 10) OR (#State = 60) OR (#State = 70) OR (#State = 80)
-      OR (((#State = 900) OR (#State = 905)) AND NOT #DeviceAck);
+   #ControlledStop := (#State = 60) OR (#State = 70) OR (#State = 80) OR (#State = 900);
    IF (#State >= 55) AND (#State <= 80) THEN
       #SignedError_um := DINT_TO_LREAL(#ActualPosition_um) - DINT_TO_LREAL(#PauseTarget_um);
    ELSE

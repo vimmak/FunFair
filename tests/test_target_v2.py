@@ -36,8 +36,8 @@ class MovingTarget(unittest.TestCase):
 
     def test_pause_holds_target_and_defers_switch(self):
         original = self.scan(180, FirstScan=False, GameState=50)['Target_um']
-        self.assertEqual(self.scan(PauseDI=True)['Target_um'], original)
-        frame = self.scan(100, PauseDI=False, GameState=80, HighDifficulty=False)
+        self.assertEqual(self.scan(GameState=55)['Target_um'], original)
+        frame = self.scan(100, GameState=80, HighDifficulty=False)
         self.assertEqual((frame['ActiveMode'], frame['Target_um']), (2, original))
         self.assertEqual(self.scan(GameState=30, HighDifficulty=True)['Target_um'], original)
         self.assertLess(self.scan(120)['Target_um'], original)
@@ -46,8 +46,8 @@ class MovingTarget(unittest.TestCase):
 
     def test_bool_change_during_pause_applies_when_motion_resumes(self):
         self.scan(120, FirstScan=False, GameState=50)
-        frame = self.scan(PauseDI=True, HighDifficulty=False)
+        frame = self.scan(GameState=60, HighDifficulty=False)
         self.assertEqual(frame['ActiveMode'], 2)
-        self.assertEqual(self.scan(PauseDI=False, GameState=80)['ActiveMode'], 2)
+        self.assertEqual(self.scan(GameState=80)['ActiveMode'], 2)
         frame = self.scan(GameState=30)
         self.assertEqual((frame['ActiveMode'], frame['Target_um']), (1, 13000))

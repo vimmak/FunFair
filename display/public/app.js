@@ -12,13 +12,14 @@ createApp({
       if (this.f.state === 900 || this.f.state === 905) return '夹爪等待恢复'
       if (this.f.valid) return this.f.success ? '命中！' : '差一点'
       if ([55, 60, 70].includes(this.f.state)) return '等待停稳'
-      if (this.f.state === 10) return '等待解锁'
+      if (this.f.state === 10) return '等待启动'
       if (this.overlap) return '现在暂停'
       return this.f.state === 0 ? '等待夹爪就绪' : '看准目标'
     },
     hint() {
       if (!this.online) return this.reason || '等待现场数据'
-      if (this.f.valid || this.f.state === 10) return '解锁暂停按钮，继续挑战'
+      if (this.f.valid) return '按下复位按钮，继续挑战'
+      if (this.f.state === 10) return '按下复位按钮，开始挑战'
       if (this.f.state >= 900) return '请查看设备状态和诊断码'
       if (this.f.state >= 55) return '停稳后显示本轮成绩'
       return '夹爪指针进入目标窗口时，按下暂停按钮'

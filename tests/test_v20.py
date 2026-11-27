@@ -30,7 +30,8 @@ class NativePort(SimpleNamespace):
     def call(self, dt, **inputs):
         self.command = inputs
         assert inputs['b_RELEASE_FUNCTION_BLOCK'] and inputs['b_00_FAST_STOP']
-        assert not (inputs['b_01_STOP'] and inputs['b_13_MOVE_TO_ABSOLUTE_POSITION'])
+        assert sum(inputs[name] for name in ('b_01_STOP', 'b_02_ACKNOLEDGE',
+            'b_13_MOVE_TO_ABSOLUTE_POSITION')) <= 1
 
 
 class AutoGame(unittest.TestCase):
@@ -57,6 +58,13 @@ class AutoGame(unittest.TestCase):
         self.port.b_05_COMMAND_RECEIVED_TOGGLE ^= True
         self.scan()
 
+    def press_reset(self):
+        self.scan(ResetButton=True)
+        self.scan(ResetButton=False)
+
+    def lights(self):
+        return tuple(self.v[name] for name in ('LampDO0', 'LampDO1', 'LampDO2'))
+
     def moving(self):
         self.scan(16)
         self.assertTrue(self.port.command['b_13_MOVE_TO_ABSOLUTE_POSITION'])
@@ -64,9 +72,11 @@ class AutoGame(unittest.TestCase):
         self.assertEqual(self.v['State'], 50)
 
     def pause_at(self, position):
+        self.press_reset()
         self.moving()
         self.scan(PauseDI=True)
         self.assertTrue(self.port.command['b_01_STOP'])
+        self.scan(PauseDI=False)
         self.ack()
         self.port.di_ACTUAL_POSITION = position
         self.port.b_04_COMMAND_SUCCESSFULLY_PROCESSED = True
@@ -76,6 +86,7 @@ class AutoGame(unittest.TestCase):
         self.assertTrue(self.v['ResultValid'])
 
     def test_auto_reverse_and_native_setpoints(self):
+        self.press_reset()
         self.moving()
         c = self.port.command
         self.assertEqual((c['di_POSITION'], c['di_VELOCITY']), (23000, 2000))
@@ -89,37 +100,45 @@ class AutoGame(unittest.TestCase):
             self.moving()
             self.assertEqual(self.port.command['di_POSITION'], following)
 
-    def test_boot_locked_or_offline_never_moves(self):
-        self.port.b_00_READY_FOR_OPERATION = False
-        self.scan(20, FirstScan=True, PauseDI=True)
-        self.port.b_00_READY_FOR_OPERATION = True
-        self.scan(30, FirstScan=False)
-        self.assertFalse(self.v['ResultValid'])
-        self.assertFalse(self.port.command['b_13_MOVE_TO_ABSOLUTE_POSITION'])
-        self.scan(PauseDI=False)
+    def test_boot_held_reset_or_offline_never_moves(self):
+        self.scan(20, FirstScan=True, ResetButton=True, DataValid=False)
+        self.scan(30, FirstScan=False, DataValid=True)
+        self.assertEqual(self.v['State'], 10)
+        self.assertEqual(self.lights(), (False, False, False))
+        self.scan(20, ResetButton=False)
+        self.assertEqual(self.v['State'], 10)
+        self.press_reset()
         self.moving()
 
-    def test_score_pins_and_unlock(self):
+    def test_pause_press_latches_score_and_reset_resumes(self):
         self.pause_at(11900)
         self.assertEqual((self.v['ActualPosition_um'], self.v['SignedError_um']), (11900, -1100))
         self.assertTrue(self.v['Success'])
-        self.scan(30, ResetButton=True, TargetPosition_um=8000)
+        self.scan(30, TargetPosition_um=8000)
+        self.assertEqual(self.v['SignedError_um'], -1100)
         self.assertEqual(self.v['State'], 80)
+        self.scan(PauseDI=True, ResetButton=True)
+        self.scan(PauseDI=False, ResetButton=False)
+        self.assertEqual(self.v['State'], 80)
+        self.press_reset()
         self.assertFalse(self.port.command['b_02_ACKNOLEDGE'])
-        self.scan(PauseDI=False)
         self.assertFalse(self.v['ResultValid'])
         self.assertEqual(self.v['SignedError_um'], 3900)
         self.moving()
+        self.assertEqual(self.port.command['di_POSITION'], 23000)
+        self.pause_at(8000)
+        self.assertTrue(self.v['Success'])
 
     def test_boundary_misses(self):
         self.pause_at(15000)
         self.assertFalse(self.v['Success'])
 
-    def test_early_unlock_waits_for_stop_ack_and_settling(self):
+    def test_early_reset_waits_for_new_press_after_stop(self):
+        self.press_reset()
         self.scan(16)
         self.scan(PauseDI=True)
         self.assertEqual(self.v['State'], 55)
-        self.scan(PauseDI=False)
+        self.scan(PauseDI=False, ResetButton=True)
         self.ack()
         self.assertEqual(self.v['State'], 60)
         self.assertTrue(self.port.command['b_01_STOP'])
@@ -130,70 +149,109 @@ class AutoGame(unittest.TestCase):
         self.scan(25)
         self.assertEqual(self.v['State'], 70)
         self.scan(40)
-        self.assertEqual(self.v['State'], 40)
+        self.assertEqual(self.v['State'], 80)
+        self.scan(20, ResetButton=False)
+        self.assertEqual(self.v['State'], 80)
+        self.press_reset()
+        self.moving()
 
-    def test_reset_only_acknowledges_device(self):
+    def test_pause_during_recovery_prevents_motion_until_new_reset(self):
+        self.port.b_07_ERROR = True
+        self.press_reset()
+        self.scan(PauseDI=True)
+        self.scan(PauseDI=False)
+        self.port.b_07_ERROR = False
+        self.scan(20)
+        self.assertEqual(self.v['State'], 10)
+        self.press_reset()
+        self.moving()
+
+    def test_startup_fault_ack_outlasts_button_and_awaits_ready(self):
+        self.port.b_07_ERROR = True
+        self.port.i_DIAGNOSIS_ERROR = 0xEF
+        self.port.b_03_NOT_FEASIBLE = True
+        self.scan()
+        self.press_reset()
+        self.assertEqual(self.v['State'], 905)
+        self.assertTrue(self.port.command['b_02_ACKNOLEDGE'])
+        self.port.b_07_ERROR = False
+        self.port.i_DIAGNOSIS_ERROR = 0
+        self.scan(30)
+        self.assertFalse(self.port.command['b_02_ACKNOLEDGE'])
+        self.assertEqual(self.v['State'], 905)
+        self.assertEqual(self.lights(), (False, False, False))
+        self.port.b_03_NOT_FEASIBLE = False
+        self.scan()
+        self.moving()
+
+    def test_runtime_fault_latches_then_recovers_with_reset(self):
+        self.press_reset()
         self.moving()
         self.port.b_07_ERROR = True
         self.port.i_DIAGNOSIS_ERROR = 0xCA
         self.scan()
         self.assertEqual((self.v['FaultCode'], self.v['GripperFaultCode']), (1, 0xCA))
-        self.scan(8, ResetButton=True)
+        self.assertEqual(self.lights(), (False, False, False))
+        self.press_reset()
         self.assertTrue(self.port.command['b_02_ACKNOLEDGE'])
         self.port.b_07_ERROR = False
         self.port.i_DIAGNOSIS_ERROR = 0
-        self.scan(30, ResetButton=False)
-        self.assertEqual(self.v['State'], 900)
-        self.assertFalse(self.port.command['b_02_ACKNOLEDGE'])
-        self.scan(PauseDI=True)
-        self.scan(PauseDI=False)
+        self.scan()
         self.moving()
+        self.assertEqual(self.v['FaultCode'], 0)
 
-    def test_no_ack_and_no_stale_data_score(self):
+    def test_unanswered_ack_can_be_retried(self):
+        self.port.b_07_ERROR = True
+        self.press_reset()
+        self.scan(610)
+        self.assertEqual((self.v['State'], self.v['FaultCode']), (900, 10))
+        self.assertFalse(self.port.command['b_02_ACKNOLEDGE'])
+        self.press_reset()
+        self.assertTrue(self.port.command['b_02_ACKNOLEDGE'])
+
+    def test_no_move_ack_fault_and_no_stale_data_score(self):
+        self.press_reset()
         self.scan(230)
         self.assertEqual(self.v['FaultCode'], 3)
         self.scan(DataValid=False)
         self.assertFalse(self.v['ResultValid'])
         self.assertTrue(self.port.command['b_01_STOP'])
+        self.scan(30, DataValid=True)
+        self.assertEqual(self.v['State'], 900)
+        self.press_reset()
+        self.moving()
 
-    def test_cpu_restart_with_pause_released_during_stop(self):
+    def test_cpu_restart_requires_new_reset(self):
         self.pause_at(13000)
-        self.port.b_07_ERROR = True
-        self.scan(FirstScan=True, PauseDI=False)
-        self.scan(FirstScan=False, ResetButton=True)
-        self.assertTrue(self.port.command['b_02_ACKNOLEDGE'])
-        self.port.b_07_ERROR = False
-        self.scan(30)
-        self.assertEqual(self.v['State'], 905)
-        self.port.b_00_READY_FOR_OPERATION = False
-        self.scan(30, ResetButton=False)
-        self.assertFalse(self.port.command['b_13_MOVE_TO_ABSOLUTE_POSITION'])
-        self.port.b_00_READY_FOR_OPERATION = True
-        self.moving()
-
-    def test_startup_ack_with_pause_locked(self):
-        self.port.b_07_ERROR = True
-        self.scan(PauseDI=True)
-        self.scan(ResetButton=True)
-        self.port.b_07_ERROR = False
-        self.scan(30, ResetButton=False)
+        self.scan(FirstScan=True)
+        self.scan(30, FirstScan=False)
         self.assertEqual(self.v['State'], 10)
-        self.assertFalse(self.v['ResultValid'])
-        self.scan(PauseDI=False)
+        self.assertEqual(self.lights(), (False, False, False))
+        self.press_reset()
         self.moving()
 
-    def test_startup_ack_waits_for_not_feasible_to_clear(self):
-        self.port.b_07_ERROR = True
-        self.port.i_DIAGNOSIS_ERROR = 0xEF
-        self.port.b_03_NOT_FEASIBLE = True
-        self.scan()
-        self.scan(ResetButton=True)
-        self.assertTrue(self.port.command['b_02_ACKNOLEDGE'])
-        self.port.b_07_ERROR = False
-        self.port.i_DIAGNOSIS_ERROR = 0
-        self.scan(30, ResetButton=False)
-        self.assertEqual(self.v['GripperFaultCode'], 0)
-        self.assertEqual(self.v['State'], 905)
-        self.assertFalse(self.port.command['b_13_MOVE_TO_ABSOLUTE_POSITION'])
-        self.port.b_03_NOT_FEASIBLE = False
+    def test_chase_and_pause_blink_timing(self):
+        self.press_reset()
         self.moving()
+        self.assertEqual(self.lights(), (True, False, False))
+        self.scan(45)
+        self.assertEqual(self.lights(), (False, True, False))
+        self.scan(52)
+        self.assertEqual(self.lights(), (False, False, True))
+        self.scan(52)
+        self.assertEqual(self.lights(), (True, False, False))
+        self.scan(PauseDI=True)
+        self.assertEqual(self.lights(), (False, False, False))
+        self.ack()
+        self.port.b_04_COMMAND_SUCCESSFULLY_PROCESSED = True
+        self.scan(80, PauseDI=False)
+        self.assertEqual(self.v['State'], 80)
+        self.assertEqual(self.lights(), (True, False, False))
+        self.scan(22)
+        self.assertEqual(self.lights(), (False, False, False))
+        self.scan(52)
+        self.assertEqual(self.lights(), (True, False, False))
+        self.press_reset()
+        self.assertEqual(self.lights(), (True, False, False))
+        self.scan(52)
+        self.assertEqual(self.lights(), (False, True, False))
