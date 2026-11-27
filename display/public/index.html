@@ -7,55 +7,89 @@
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-<main id="app" v-cloak>
-  <header>
-    <div class="brand-banner">
-      <img class="brand" src="/schunk-logo.png" alt="SCHUNK">
-    </div>
-    <div class="game-toolbar">
-      <div class="event-title">精准停位挑战</div>
-      <div class="controls">
-        <span :class="{connected: online}">{{ online ? (demo ? '演示' : 'PLC 在线') : '离线' }}</span>
-        <button type="button" @click="fullscreen">{{ full ? '退出全屏' : '全屏' }}</button>
-      </div>
-    </div>
+<main id="app" class="kiosk" v-cloak>
+  <header class="brand-banner">
+    <img class="brand" src="/schunk-logo.png" width="1081" height="363" alt="SCHUNK">
   </header>
 
-  <section class="hero">
-    <div><h1>{{ title }}</h1><p>{{ hint }}</p></div>
-    <div class="leader"><span>夹爪位置</span><strong>{{ mm(f?.actual) }} <small>mm</small></strong></div>
-  </section>
-
-  <section class="rail" :class="{ aligned: overlap }" aria-label="夹爪位置和目标窗口">
-    <div class="legend"><span class="cursor-key">夹爪指针</span><span class="window-key">目标窗口</span></div>
-    <svg viewBox="0 0 1000 150" role="img" aria-label="夹爪开合轨道">
-      <defs><pattern id="ticks" width="23" height="20" patternUnits="userSpaceOnUse">
-        <path d="M 0 0 V 14" stroke="#89a1ae" stroke-width="1"/>
-      </pattern></defs>
-      <rect x="40" y="50" width="920" height="42" rx="5" class="lane" />
-      <rect x="40" y="98" width="920" height="16" fill="url(#ticks)" />
-      <template v-if="f">
-        <rect :x="band.left" y="43" :width="band.width" height="56" rx="4" class="window" />
-        <path :d="'M '+x(f.target)+' 48 v46'" class="target-line" />
-        <g :transform="'translate('+x(f.actual)+' 0)'" class="cursor">
-          <path d="M -13 22 H 13 V 31 L 0 44 L -13 31 Z" />
-          <rect x="-3" y="44" width="6" height="54" rx="2" />
-        </g>
-        <text x="40" y="141">夹紧 {{ mm(f.close) }} mm</text>
-        <text x="960" y="141" text-anchor="end">张开 {{ mm(f.open) }} mm</text>
-      </template>
-    </svg>
-    <div class="metrics">
-      <div><span>目标位置</span><strong>{{ mm(f?.target) }} <small>mm</small></strong></div>
-      <div><span>窗口半宽</span><strong>±{{ mm(f?.tolerance) }} <small>mm</small></strong></div>
-      <div><span>实时偏差</span><strong>{{ signed(f?.error) }} <small>mm</small></strong></div>
+  <div class="dashboard">
+    <div class="toolbar">
+      <h1>精准停位挑战</h1>
+      <div class="controls">
+        <span class="mode" v-if="modeLabel">{{ modeLabel }}</span>
+        <span class="connection" :class="{connected: online}">{{ connectionLabel }}</span>
+        <button type="button" v-if="canFullscreen" @click="fullscreen">
+          <span class="fullscreen-icon" aria-hidden="true"></span>
+          {{ full ? '退出全屏' : '全屏' }}
+        </button>
+        <span class="fullscreen-error" role="status" v-if="fullscreenError">{{ fullscreenError }}</span>
+      </div>
     </div>
-  </section>
 
-  <footer>
-    <div :key="f?.seq" class="score">{{ f?.seq ? '最近成绩 · '+(f.lastSuccess?'命中':'未命中')+'　'+signed(f.lastError)+' mm' : '等待首轮成绩' }}</div>
-    <div>状态 {{ f?.state ?? '—' }}　程序 {{ hex(f?.fault) }}　夹爪 {{ hex(f?.gripperFault) }}</div>
-  </footer>
+    <section class="game" :data-tone="tone" aria-labelledby="game-status">
+      <div class="game-header">
+        <div class="prompt">
+          <h2 id="game-status">{{ title }}</h2>
+          <p>{{ hint }}</p>
+        </div>
+        <div class="position">
+          <span class="label">夹爪位置</span>
+          <strong>{{ mm(frame?.actual) }} <small>mm</small></strong>
+        </div>
+      </div>
+      <p class="sr-only" role="status">{{ announcement }}</p>
+
+      <figure class="track" aria-label="夹爪开合轨道">
+        <figcaption class="legend">
+          <span class="pointer-key">夹爪指针</span>
+          <span class="window-key">目标窗口</span>
+        </figcaption>
+        <div class="track-plot" aria-hidden="true">
+          <div class="track-lane"></div>
+          <div class="track-ticks"></div>
+          <template v-if="frame">
+            <div class="target-window" :style="{ left: band.left + '%', width: band.width + '%' }"></div>
+            <div class="target-center" :style="{ left: band.center + '%' }"></div>
+            <div class="track-pointer" :style="{ left: pointer + '%' }"></div>
+          </template>
+        </div>
+        <div class="track-ends">
+          <span>夹紧 <b>{{ mm(frame?.close) }} mm</b></span>
+          <span>张开 <b>{{ mm(frame?.open) }} mm</b></span>
+        </div>
+      </figure>
+
+      <dl class="metrics">
+        <div>
+          <dt>目标位置</dt>
+          <dd>{{ mm(frame?.target) }} <small>mm</small></dd>
+        </div>
+        <div>
+          <dt>判定容差</dt>
+          <dd>{{ frame ? '±' + mm(frame.tolerance) : '—' }} <small>mm</small></dd>
+        </div>
+        <div>
+          <dt>{{ outcome ? '停位偏差' : '实时偏差' }}</dt>
+          <dd>{{ signed(frame?.error) }} <small>mm</small></dd>
+        </div>
+      </dl>
+    </section>
+
+    <footer class="footer">
+      <div class="recent-score">
+        <span>最近成绩</span>
+        <strong v-if="f?.seq" :class="f.lastSuccess ? 'hit' : 'miss'">
+          {{ f.lastSuccess ? '命中' : '未命中' }} <span>{{ signed(f.lastError) }} mm</span>
+        </strong>
+        <span v-else>暂无成绩</span>
+      </div>
+      <div class="diagnostics">
+        <span>状态 <b>{{ frame?.state ?? '—' }}</b></span>
+        <span>程序 <b>{{ hex(frame?.fault) }}</b></span>
+        <span>夹爪 <b>{{ hex(frame?.gripperFault) }}</b></span>
+      </div>
+    </footer>
+  </div>
 </main>
 <script type="module" src="/app.js"></script>
 </body>
