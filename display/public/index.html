@@ -3,14 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>FunFair · 精准停位挑战</title>
+  <title>精准停止挑战</title>
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
 <main id="app" v-cloak>
   <header>
-    <div class="brand"><strong>FunFair</strong><span>SCHUNK · 精准停位挑战</span></div>
-    <div class="mode-label" :title="f && !f.mode ? hex(f.activeModeWord) : ''">{{ modeLabel }}</div>
+    <img class="brand" src="/schunk-logo.png" alt="SCHUNK">
+    <div class="event-title">精准停止挑战</div>
     <div class="controls"><span :class="{connected: online}">{{ online ? (demo ? '演示' : 'PLC 在线') : '离线' }}</span>
       <button @click="fullscreen">{{ full ? '退出全屏' : '全屏' }}</button>
     </div>

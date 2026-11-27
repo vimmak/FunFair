@@ -3,12 +3,6 @@ import { createApp } from '/vue.js'
 createApp({
   data: () => ({ f: null, online: false, demo: false, reason: '', received: 0, full: false }),
   computed: {
-    modeLabel() {
-      if (!this.f) return '等待模式数据'
-      if (this.f.mode === 1) return '固定目标'
-      if (this.f.mode === 2) return '移动目标'
-      return '模式数据无效'
-    },
     overlap() {
       return this.online && [30, 40, 50].includes(this.f.state) &&
         Math.abs(this.f.actual - this.f.target) < this.f.tolerance
