@@ -1,13 +1,11 @@
 import unittest
-from unittest.mock import patch
 
-import test_scan_logic as sim
+from scl_scan import ScanModel
 
 
 class MovingTarget(unittest.TestCase):
     def setUp(self):
-        with patch.object(sim, 'SOURCE', sim.SOURCE.parent / 'v20' / 'FB_FunFairTarget.scl'):
-            self.target = sim.ScanModel()
+        self.target = ScanModel('FB_FunFairTarget')
         self.scan(FirstScan=True, GameState=0, HighDifficulty=True,
                          ClosePosition_um=22000, OpenPosition_um=1000, FixedTarget_um=13000)
 

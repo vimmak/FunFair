@@ -1,22 +1,13 @@
 """OB1 scan tests: execute the wrapper and game SCL, substitute the PN device."""
 import unittest
-from unittest.mock import patch
 from types import SimpleNamespace
 
-import test_scan_logic as sim
-
-
-V20 = sim.SOURCE.parent / 'v20'
-
-
-def load_fb(name):
-    with patch.object(sim, 'SOURCE', V20 / (name + '.scl')):
-        return sim.ScanModel()
+from scl_scan import ScanModel
 
 
 class GameInstance:
     def __init__(self):
-        self.fb = load_fb('FB_StopGameV20')
+        self.fb = ScanModel('FB_StopGameV20')
 
     def call(self, dt, **inputs):
         self.fb.scan(**inputs)
@@ -36,7 +27,7 @@ class NativePort(SimpleNamespace):
 
 class AutoGame(unittest.TestCase):
     def setUp(self):
-        self.ob = load_fb('FB_FunFairEGU_V20')
+        self.ob = ScanModel('FB_FunFairEGU_V20')
         self.port = NativePort(b_00_READY_FOR_OPERATION=True,
             b_01_CONTOL_AUTHORITY_FIELDBUS=True, b_07_ERROR=False,
             b_03_NOT_FEASIBLE=False, b_04_COMMAND_SUCCESSFULLY_PROCESSED=False,
@@ -45,7 +36,8 @@ class AutoGame(unittest.TestCase):
         self.v = self.ob.v
         self.v.update(Game=GameInstance(), EGU=self.port, OpenPosition_um=1000,
             ClosePosition_um=23000, TargetPosition_um=13000, Tolerance_um=2000,
-            Velocity_um_s=2000, FirstScan=True, InputHW=278, OutputHW=277)
+            Velocity_um_s=2000, FirstScan=True, MotionPermit=True, DataValid=True,
+            InputHW=278, OutputHW=277)
         self.scan()
         self.v['FirstScan'] = False
 

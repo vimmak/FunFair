@@ -1,8 +1,10 @@
 # FunFair：TIA Portal V18 第一版程序
 
+本文记录旧版草稿。当前工程的导入说明见 [TIA Portal V20](../README.md#v20自动往复与暂停判分)。
+
 目标：CPU 1211C DC/DC/DC；SCHUNK EGU 60-PN-M-B（1491558），用户报告固件 V5.3，手册核对版本为 V5.3.1。补丁版本、CPU 订货号/固件尚未读取。
 
-已交付 `plc/FB_FunFair_StopGame.scl`：可导入的 SCL 外部源文件草稿。没有 TIA 编译器或现场设备，**尚未在 V18 编译、未通过 PLCSIM/实机验证，不是可直接下载运行的成品工程**。该 FB 是游戏控制层；设备初始化、故障确认、PN 数据有效性和硬件安全功能由工程的驱动层提供。
+旧版 SCL 外部源文件草稿已归档到[历史提交](https://github.com/vimmak/FunFair/blob/e9ffb30f66e1d6fe46ae6089894d22092b95889f/plc/FB_FunFair_StopGame.scl)。没有 TIA 编译器或现场设备，**尚未在 V18 编译、未通过 PLCSIM/实机验证，不是可直接下载运行的成品工程**。该 FB 是游戏控制层；设备初始化、故障确认、PN 数据有效性和硬件安全功能由工程的驱动层提供。
 
 ## v0.2：已确认的新玩法
 
@@ -112,9 +114,9 @@
 
 ## 已执行的回归检查
 
-`tests/test_scan_logic.py` 直接读取本 SCL 的语句体，用一个受限的 Python 扫描解释器执行其中支持的 IF/CASE、赋值、TON 和 R_TRIG 语句。
+[历史测试脚本](https://github.com/vimmak/FunFair/blob/e9ffb30f66e1d6fe46ae6089894d22092b95889f/tests/test_scan_logic.py)直接读取旧版 SCL 的语句体，用一个受限的 Python 扫描解释器执行其中支持的 IF/CASE、赋值、TON 和 R_TRIG 语句。
 
-运行：`python -m unittest discover -s tests -v`。
+从上述历史提交运行 `python -m unittest discover -s tests -v` 可重现旧版测试。
 
 覆盖自动开始、按住不切换、完整点击停止/恢复、启动按住、抖动、定位迟到确认、停止中点击不排队、跨状态按住、端点换向优先级、严格容差边界、缓慢漂移、数据失效恢复、许可恢复、确认超时和人工中止。
 
