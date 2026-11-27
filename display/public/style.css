@@ -4,6 +4,7 @@
   background: #e9eff3;
   font-variant-numeric: tabular-nums;
   --blue: #009ee0;
+  --banner-navy: #003d6a;
   --ink: #132a3a;
   --quiet: #455e6e;
   --light: #e9eff3;
@@ -13,28 +14,49 @@
 body { margin: 0; min-height: 100dvh; display: grid; place-items: center; }
 [v-cloak] { visibility: hidden; }
 main {
+  --page-gutter: min(3.5vw, 6.222dvh);
   width: min(100vw, 177.778dvh);
   aspect-ratio: 16/9;
   container-type: inline-size;
   display: grid;
   align-content: space-between;
-  padding: 2.6% 3.5%;
-  border-top: 8px solid var(--blue);
+  padding: 0 var(--page-gutter) min(2.6vw, 4.622dvh);
   background: var(--white);
 }
 header {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
   gap: 1.5cqw;
+  margin-inline: calc(0px - var(--page-gutter));
+  padding: 1.8cqw var(--page-gutter) 3.05cqw;
+  background: var(--banner-navy);
+  color: var(--white);
+}
+header::after {
+  --line-weight: clamp(2px, .29cqw, 7px);
+  position: absolute;
+  inset-inline: 0;
+  bottom: .62cqw;
+  height: 1.65cqw;
+  background: var(--blue);
+  content: "";
+  pointer-events: none;
+  clip-path: polygon(
+    0 calc(100% - var(--line-weight)), 56% calc(100% - var(--line-weight)),
+    60.5% 0, 100% 0, 100% var(--line-weight), 60.5% var(--line-weight),
+    56% 100%, 0 100%
+  );
 }
 .controls, .hero, .legend, footer { display: flex; align-items: center; }
 .hero, footer { justify-content: space-between; gap: 1.5cqw; }
 .brand { display: block; width: 11cqw; max-width: 100%; height: auto; }
-.controls span, .legend, footer { color: var(--quiet); font-size: 1.2cqw; }
-.event-title { font-size: 2.35cqw; font-weight: 700; text-align: center; }
+.legend, footer { color: var(--quiet); font-size: 1.2cqw; }
+.controls span { color: #e1eef7; font-size: 1.2cqw; white-space: nowrap; }
+.event-title { font-size: 2.35cqw; font-weight: 700; text-align: center; white-space: nowrap; }
 .controls { justify-self: end; gap: 1cqw; }
-.controls .connected { color: #006a43; }
+.controls .connected { color: #a9efd8; }
 button {
   font: inherit;
   font-size: 1.2cqw;
@@ -46,7 +68,8 @@ button {
   border-radius: .35cqw;
   cursor: pointer;
 }
-.controls button { border-color: #bacbd5; }
+.controls button { color: inherit; border-color: #7aaccd; white-space: nowrap; }
+.controls button:hover { background: #ffffff15; }
 button:focus-visible { outline: 3px solid var(--blue); outline-offset: 2px; }
 .hero { align-items: end; padding: 1cqw 0; }
 .hero h1 { margin: 0; font-size: 6.1cqw; line-height: 1.07; letter-spacing: -.04em; }
