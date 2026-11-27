@@ -3,16 +3,21 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>精准停止挑战</title>
+  <title>精准停位挑战</title>
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
 <main id="app" v-cloak>
   <header>
-    <img class="brand" src="/schunk-logo.png" alt="SCHUNK">
-    <div class="event-title">精准停止挑战</div>
-    <div class="controls"><span :class="{connected: online}">{{ online ? (demo ? '演示' : 'PLC 在线') : '离线' }}</span>
-      <button @click="fullscreen">{{ full ? '退出全屏' : '全屏' }}</button>
+    <div class="brand-banner">
+      <img class="brand" src="/schunk-logo.png" alt="SCHUNK">
+    </div>
+    <div class="game-toolbar">
+      <div class="event-title">精准停位挑战</div>
+      <div class="controls">
+        <span :class="{connected: online}">{{ online ? (demo ? '演示' : 'PLC 在线') : '离线' }}</span>
+        <button type="button" @click="fullscreen">{{ full ? '退出全屏' : '全屏' }}</button>
+      </div>
     </div>
   </header>
 

@@ -23,40 +23,39 @@ main {
   padding: 0 var(--page-gutter) min(2.6vw, 4.622dvh);
   background: var(--white);
 }
-header {
+.brand-banner {
   position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  align-items: center;
-  gap: 1.5cqw;
   margin-inline: calc(0px - var(--page-gutter));
-  padding: 1.8cqw var(--page-gutter) 3.05cqw;
+  padding: 1.35cqw var(--page-gutter) 3.35cqw;
   background: var(--banner-navy);
-  color: var(--white);
 }
-header::after {
+.brand-banner::after {
   --line-weight: clamp(2px, .29cqw, 7px);
+  --rise: 2.1cqw;
+  --bend-start: 58%;
+  --bend-end: calc(var(--bend-start) + var(--rise) * 1.8);
   position: absolute;
   inset-inline: 0;
   bottom: .62cqw;
-  height: 1.65cqw;
+  height: calc(var(--rise) + var(--line-weight));
   background: var(--blue);
   content: "";
   pointer-events: none;
   clip-path: polygon(
-    0 calc(100% - var(--line-weight)), 56% calc(100% - var(--line-weight)),
-    60.5% 0, 100% 0, 100% var(--line-weight), 60.5% var(--line-weight),
-    56% 100%, 0 100%
+    0 var(--rise), var(--bend-start) var(--rise),
+    var(--bend-end) 0, 100% 0, 100% var(--line-weight),
+    var(--bend-end) var(--line-weight), var(--bend-start) 100%, 0 100%
   );
 }
-.controls, .hero, .legend, footer { display: flex; align-items: center; }
-.hero, footer { justify-content: space-between; gap: 1.5cqw; }
+.game-toolbar, .controls, .hero, .legend, footer { display: flex; align-items: center; }
+.game-toolbar, .hero, footer { justify-content: space-between; gap: 1.5cqw; }
+.game-toolbar { padding: .85cqw 0; border-bottom: 1px solid #d4e1e8; }
 .brand { display: block; width: 11cqw; max-width: 100%; height: auto; }
-.legend, footer { color: var(--quiet); font-size: 1.2cqw; }
-.controls span { color: #e1eef7; font-size: 1.2cqw; white-space: nowrap; }
-.event-title { font-size: 2.35cqw; font-weight: 700; text-align: center; white-space: nowrap; }
-.controls { justify-self: end; gap: 1cqw; }
-.controls .connected { color: #a9efd8; }
+.controls span, .legend, footer { color: var(--quiet); font-size: 1.2cqw; }
+.controls span { white-space: nowrap; }
+.event-title { color: var(--banner-navy); font-size: 2.35cqw; font-weight: 700; white-space: nowrap; }
+.controls { gap: 1cqw; }
+.controls .connected { color: #006a43; }
 button {
   font: inherit;
   font-size: 1.2cqw;
@@ -68,8 +67,8 @@ button {
   border-radius: .35cqw;
   cursor: pointer;
 }
-.controls button { color: inherit; border-color: #7aaccd; white-space: nowrap; }
-.controls button:hover { background: #ffffff15; }
+.controls button { border-color: #bacbd5; white-space: nowrap; }
+.controls button:hover { background: var(--light); }
 button:focus-visible { outline: 3px solid var(--blue); outline-offset: 2px; }
 .hero { align-items: end; padding: 1cqw 0; }
 .hero h1 { margin: 0; font-size: 6.1cqw; line-height: 1.07; letter-spacing: -.04em; }
