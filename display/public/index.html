@@ -16,8 +16,6 @@
     </div>
   </header>
 
-  <div class="board-layout">
-  <div class="game-column">
   <section class="hero">
     <div><h1>{{ title }}</h1><p>{{ hint }}</p></div>
     <div class="leader"><span>夹爪位置</span><strong>{{ mm(f?.actual) }} <small>mm</small></strong></div>
@@ -48,28 +46,6 @@
       <div><span>实时偏差</span><strong>{{ signed(f?.error) }} <small>mm</small></strong></div>
     </div>
   </section>
-
-  <section class="claim-strip" aria-label="扫码认领">
-    <img v-if="board.phoneUrl" src="/leaderboard-qr.png" alt="微信扫码打开 FunFair 排行榜">
-    <div><strong>微信扫码认领</strong><span>{{ board.phoneUrl ? '输入昵称和认领码，查看排名' : '设置展台 Wi-Fi 地址后显示二维码' }}</span></div>
-    <div class="claim-code" aria-live="polite"><span>最近一轮认领码</span>
-      <strong>{{ claimLabel }}</strong>
-    </div>
-  </section>
-  </div>
-  <aside class="rank-panel" aria-label="现场排行">
-    <h2>现场排行</h2>
-    <p>{{ modeLabel }} · 前 5 名</p>
-    <div class="rank-heading"><span>名次 / 玩家</span><span>绝对偏差</span></div>
-    <ol v-if="ranking.length">
-      <li v-for="(entry, index) in ranking" :key="entry.id" :class="{ 'new-score': entry.id === board.latest?.id }">
-        <span>{{ index + 1 }}</span><span class="rank-avatar" aria-hidden="true">{{ avatarFor(entry.avatar) }}</span>
-        <span class="rank-name">{{ entry.nickname }}</span><strong>{{ scoreText(entry.errorUm) }}</strong>
-      </li>
-    </ol>
-    <p v-else class="board-empty">等待首位玩家认领成绩</p>
-  </aside>
-  </div>
 
   <footer>
     <div :key="f?.seq" class="score">{{ f?.seq ? '最近成绩 · '+(f.lastSuccess?'命中':'未命中')+'　'+signed(f.lastError)+' mm' : '等待首轮成绩' }}</div>

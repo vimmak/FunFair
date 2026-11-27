@@ -3,7 +3,6 @@ import ModbusRTU from 'modbus-serial'
 import { fileURLToPath } from 'node:url'
 import { setTimeout as delay } from 'node:timers/promises'
 import { decode, movingReplay, replay } from './protocol.js'
-import { setupLeaderboard } from './leaderboard-http.js'
 
 const demo = process.argv.includes('--demo')
 const host = process.env.PLC_HOST
@@ -14,13 +13,8 @@ if (!demo && (!Number.isInteger(pollMs) || pollMs < 10 || pollMs > 1000)) {
 if (!demo && !host) throw new Error('请设置 PLC_HOST，或使用 npm run demo')
 const app = express()
 const clients = new Set()
-const captureScore = setupLeaderboard(app, {
-  demo, phoneHost: process.env.FUNFAIR_PHONE_HOST,
-  phonePort: Number(process.env.FUNFAIR_PHONE_PORT ?? 3001)
-})
 let snapshot = { online: false, reason: '等待数据', demo }
 function publish(frame) {
-  if (frame.online) captureScore(frame)
   snapshot = { ...frame, demo }
   const message = 'data: ' + JSON.stringify(snapshot) + '\n\n'
   for (const res of clients) {
@@ -81,7 +75,7 @@ if (demo) {
   setInterval(() => {
     const frame = demoMode === 1 ? replay(Date.now() - start) : movingReplay(Date.now() - start)
     if (frame.valid) latest = { seq: frame.seq, lastSuccess: frame.success, lastError: frame.error }
-    publish({ ...frame, seq: 0, ...latest, online: true, mode: demoMode, resultMode: demoMode })
+    publish({ ...frame, seq: 0, ...latest, online: true, mode: demoMode })
   }, 50)
 } else {
   poll().catch(error => { console.error(error); process.exit(1) })

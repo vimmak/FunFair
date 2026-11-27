@@ -1,17 +1,8 @@
 import { createApp } from '/vue.js'
-import { avatarFor, scoreText } from '/leaderboard-view.js'
 
 createApp({
-  data: () => ({ f: null, online: false, demo: false, reason: '', received: 0, full: false, board: { fixed: [], moving: [] } }),
+  data: () => ({ f: null, online: false, demo: false, reason: '', received: 0, full: false }),
   computed: {
-    ranking() {
-      return this.f?.mode === 2 ? this.board.moving : this.board.fixed
-    },
-    claimLabel() {
-      if (this.board.scoreFeedReady === false) return '等待新版 PLC'
-      if (!this.board.latest) return '等待判分'
-      return this.board.latest.claimed ? '已认领' : this.board.latest.code.replace(/^(...)/, '$1 ')
-    },
     modeLabel() {
       if (!this.f) return '等待模式数据'
       if (this.f.mode === 1) return '固定目标'
@@ -45,16 +36,6 @@ createApp({
     }
   },
   methods: {
-    avatarFor,
-    scoreText,
-    async refreshBoard() {
-      try {
-        const response = await fetch('/api/kiosk')
-        if (response.ok) this.board = await response.json()
-      } catch {
-        // Keep the most recent board visible until the local service reconnects.
-      }
-    },
     x(v) {
       const span = this.f.open - this.f.close
       return span ? 40 + 920 * Math.max(0, Math.min(1, (v-this.f.close)/span)) : 40
@@ -68,8 +49,6 @@ createApp({
     }
   },
   mounted() {
-    this.refreshBoard()
-    setInterval(() => this.refreshBoard(), 1000)
     document.addEventListener('fullscreenchange', () => { this.full = !!document.fullscreenElement })
     const events = new EventSource('/events')
     events.onmessage = ({data}) => {

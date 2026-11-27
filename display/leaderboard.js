@@ -36,11 +36,6 @@ export function openLeaderboard(filename = ':memory:', { now = Date.now } = {}) 
     ORDER BY ABS(error_um), id
     LIMIT ?
   `)
-  const rank = db.prepare(`
-    SELECT COUNT(*) + 1 AS rank FROM rounds
-    WHERE mode = ? AND nickname IS NOT NULL
-      AND (ABS(error_um) < ABS(?) OR (ABS(error_um) = ABS(?) AND id < ?))
-  `)
   const result = row => row ? { ...row, success: Boolean(row.success) } : null
 
   return {
@@ -77,9 +72,6 @@ export function openLeaderboard(filename = ':memory:', { now = Date.now } = {}) 
       const name = nickname.trim()
       if (!name || [...name].length > 20) return null
       return result(claimRound.get(name, randomInt(AVATAR_COUNT), code, now()))
-    },
-    rankOf({ id, mode, errorUm }) {
-      return rank.get(mode, errorUm, errorUm, id).rank
     },
     top(mode, limit = 10) {
       if (![1, 2].includes(mode) || !Number.isInteger(limit) || limit < 1 || limit > 100) {
