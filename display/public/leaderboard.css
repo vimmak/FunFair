@@ -1,0 +1,47 @@
+:root {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Noto Sans CJK SC", sans-serif;
+  font-variant-numeric: tabular-nums;
+  color: #132a3a;
+  background: #edf5f9;
+  --quiet: #455e6e;
+  --blue: #0077ac;
+  --line: #d6e3eb;
+}
+* { box-sizing: border-box; }
+body { margin: 0; border-top: 5px solid #009ee0; }
+main {
+  max-width: 520px;
+  margin: auto;
+  padding: max(16px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right))
+    max(20px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
+}
+header { display: grid; gap: 2px; margin-bottom: 16px; }
+header strong { font-size: 29px; letter-spacing: -.04em; }
+header span, .board-title span, #board-message { font-size: 13px; color: var(--quiet); }
+.surface { background: #fff; padding: 16px; margin-bottom: 12px; border-radius: 18px; border: 1px solid var(--line); }
+h1, h2 { margin: 0; font-size: 22px; line-height: 1.25; }
+form { display: grid; gap: 7px; margin-top: 14px; }
+label { font-size: 14px; font-weight: 600; }
+input, button {
+  min-height: 48px; font: inherit; font-size: 16px; border: 1px solid var(--line);
+  border-radius: 11px; padding: 10px 12px; color: inherit; background: #f4f8fa;
+}
+input { width: 100%; min-width: 0; margin-bottom: 4px; }
+button { font-weight: 650; touch-action: manipulation; }
+form button, .modes button[aria-pressed="true"] { background: var(--blue); color: #fff; border-color: var(--blue); }
+button:disabled { opacity: .65; }
+button:focus-visible, input:focus-visible { outline: 2px solid #009ee0; outline-offset: 2px; }
+#claim-message { margin: 10px 0 0; padding: 10px; border-radius: 8px; background: #e6f5ed; color: #005d3b; }
+#claim-message.error { background: #fff0ee; color: #842e29; }
+.board-title { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 5px; }
+.modes { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin: 12px 0; }
+ol { list-style: none; padding: 0; margin: 0; }
+li {
+  display: grid; grid-template-columns: 24px 32px minmax(0, 1fr) auto; gap: 7px;
+  align-items: center; border-top: 1px solid var(--line); padding: 10px 0; font-size: 14px;
+}
+li.own { background: #e6f5ed; }
+.avatar { border-radius: 50%; background: #def1fa; padding: 5px; text-align: center; }
+.name { overflow-wrap: anywhere; min-width: 0; }
+.deviation { white-space: nowrap; }
+#board-message { margin-bottom: 0; }

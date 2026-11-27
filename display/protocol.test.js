@@ -32,3 +32,11 @@ test('V2 扩展帧反馈实际模式，V1 帧仍可解码', () => {
   words[1] = 1
   assert.equal(decode(words.slice(0, 24)).mode, 1)
 })
+
+test('新版报文分别解码当前难度和上轮判分难度', () => {
+  const words = [0x4646, 3, ...Array(22).fill(0), 1, 2]
+  assert.equal(decode(words).mode, 1)
+  assert.equal(decode(words).resultMode, 2)
+  words[1] = 2
+  assert.equal(decode(words).resultMode, null)
+})

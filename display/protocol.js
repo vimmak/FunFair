@@ -1,12 +1,14 @@
 export function decode(words) {
   if (words[0] !== 0x4646 || !((words[1] === 1 && words.length === 24) ||
-      (words[1] === 2 && words.length === 26))) {
+      ([2, 3].includes(words[1]) && words.length === 26))) {
     throw new Error('显示 DB 地址或协议版本不匹配')
   }
   const dint = i => (words[i] << 16) | words[i + 1]
   return {
     mode: words[1] === 1 ? 1 : [1, 2].includes(words[24]) ? words[24] : null,
-    activeModeWord: words[1] === 2 ? words[24] : null,
+    protocolVersion: words[1],
+    resultMode: words[1] === 3 && [1, 2].includes(words[25]) ? words[25] : null,
+    activeModeWord: words[1] >= 2 ? words[24] : null,
     heartbeat: words[2], state: words[3], valid: !!words[4], success: !!words[5],
     fault: words[6], gripperFault: words[7], seq: words[8], lastSuccess: !!words[9],
     actual: dint(10), open: dint(12), close: dint(14), target: dint(16),

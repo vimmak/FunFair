@@ -2,6 +2,10 @@
 FunFair for SCHUNK Intec China Christmas Event
 
 
+## 微信扫码排行榜
+
+[展台 Wi-Fi 试玩和实机接入](docs/Leaderboard.md)
+
 ## 电脑投屏
 
 [第一版安装、TIA 接线与现场验收](docs/Display-V1.md) · [V2 移动目标和全屏投放](docs/Display-V2.md) · [网页和本地通信服务](display)

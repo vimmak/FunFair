@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#edf5f9">
+  <title>FunFair · 现场排行</title>
+  <link rel="stylesheet" href="/leaderboard.css">
+  <script type="module" src="/leaderboard-page.js"></script>
+</head>
+<body>
+  <main>
+    <header><strong>FunFair</strong><span>SCHUNK · 精准停位挑战</span></header>
+    <section class="surface" aria-labelledby="claim-title">
+      <h1 id="claim-title">认领本轮成绩</h1>
+      <form id="claim-form">
+        <label for="nickname">昵称</label>
+        <input id="nickname" name="nickname" autocomplete="nickname" maxlength="20" placeholder="榜单上显示的名字" required>
+        <label for="code">认领码</label>
+        <input id="code" name="code" type="text" inputmode="numeric" autocomplete="off" maxlength="6"
+          pattern="[0-9]{6}" placeholder="大屏上的 6 位数字" required>
+        <button type="submit">认领成绩</button>
+      </form>
+      <p id="claim-message" role="status" aria-live="polite" hidden></p>
+    </section>
+    <section class="surface" aria-labelledby="board-title">
+      <div class="board-title"><h2 id="board-title">现场排行</h2><span>前 10 名 · 绝对偏差</span></div>
+      <div class="modes" aria-label="榜单难度">
+        <button type="button" data-mode="fixed" aria-pressed="false">固定目标</button>
+        <button type="button" data-mode="moving" aria-pressed="true">移动目标</button>
+      </div>
+      <ol id="ranking"></ol>
+      <p id="board-message" role="status">正在加载排行榜</p>
+    </section>
+  </main>
+</body>
+</html>
