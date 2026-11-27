@@ -26,25 +26,20 @@ main {
 .brand-banner {
   position: relative;
   margin-inline: calc(0px - var(--page-gutter));
-  padding: 1.35cqw var(--page-gutter) 3.35cqw;
+  aspect-ratio: 128 / 13;
+  padding: 1.4cqw var(--page-gutter) 0;
   background: var(--banner-navy);
 }
 .brand-banner::after {
-  --line-weight: clamp(2px, .29cqw, 7px);
-  --rise: 2.1cqw;
-  --bend-start: 58%;
-  --bend-end: calc(var(--bend-start) + var(--rise) * 1.8);
   position: absolute;
-  inset-inline: 0;
-  bottom: .62cqw;
-  height: calc(var(--rise) + var(--line-weight));
+  inset: 0;
   background: var(--blue);
   content: "";
   pointer-events: none;
+  /* The reference banner is 2048 × 208, with an 8 px line and a 90 × 50 bend. */
   clip-path: polygon(
-    0 var(--rise), var(--bend-start) var(--rise),
-    var(--bend-end) 0, 100% 0, 100% var(--line-weight),
-    var(--bend-end) var(--line-weight), var(--bend-start) 100%, 0 100%
+    0 62.5%, 57.96% 62.5%, 62.35% 38.46%, 100% 38.46%,
+    100% 42.31%, 62.35% 42.31%, 57.96% 66.35%, 0 66.35%
   );
 }
 .game-toolbar, .controls, .hero, .legend, footer { display: flex; align-items: center; }
